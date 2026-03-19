@@ -46,7 +46,7 @@ Players connect to a central server and solve the same Sudoku puzzle in a **turn
 
 ## 🧱 Project Structure
 
-
+```
 sudoku/
 │
 ├── engine/
@@ -62,7 +62,7 @@ sudoku/
 │ └── test_engine.py
 │
 └── README.md
-
+```
 
 ---
 
@@ -85,28 +85,36 @@ sudoku/
 ### 1. Install dependencies
 ```bash
 pip install fastapi uvicorn websockets
+```
 2. Start the server
+```
 uvicorn server.main:app --reload
+```
 3. Create a game
+```
 curl -X POST http://127.0.0.1:8000/create
-
+```
 Response:
-
+```
 {
   "game_id": "your-game-id"
 }
+```
 4. Connect players
 
 Open two terminals:
-
+```
 websocat ws://127.0.0.1:8000/ws/<game_id>
+```
 5. Send a move
+```
 {
   "type": "move",
   "row": 0,
   "col": 1,
   "value": 5
 }
+```
 🔄 Game Flow
 
 Player joins game
