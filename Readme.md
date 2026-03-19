@@ -115,102 +115,94 @@ websocat ws://127.0.0.1:8000/ws/<game_id>
   "value": 5
 }
 ```
-🔄 Game Flow
+### 🔄 Game Flow
 
-Player joins game
+- Player joins game
 
-Server assigns:
+- Server assigns:
 
-player_id
+- player_id
 
-initial board
+- initial board
 
-Players alternate turns
+- Players alternate turns
 
-Server validates moves
+- Server validates moves
 
-Scores update
+- Scores update
 
-Game ends when:
+- Game ends when:
 
-board is complete OR
+- board is complete OR
 
-timer expires
+- timer expires
 
-⚠️ Current Limitations
+### ⚠️ Current Limitations
 
-Puzzle may have multiple solutions
+- Puzzle may have multiple solutions
 
-Only "correct" moves allowed (strict mode)
+- Only "correct" moves allowed (strict mode)
 
-No UI (CLI/Web UI planned)
+- No UI (CLI/Web UI planned)
 
-Timer depends on client activity (no background scheduler yet)
+- Timer depends on client activity (no background scheduler yet)
 
-🧠 Upcoming Features
-🤖 Phase 3 — ML Integration
+## 🧠 Upcoming Features
+### 🤖 Phase 3 — ML Integration
 
-Train model to predict puzzle difficulty
+- Train model to predict puzzle difficulty
 
-Feature engineering from Sudoku structure
+- Feature engineering from Sudoku structure
 
-Dataset generation pipeline
+- Dataset generation pipeline
 
-⛓️ Phase 4 — Blockchain Integration
+### ⛓️ Phase 4 — Blockchain Integration
 
-Store puzzle hash on blockchain
+- Store puzzle hash on blockchain
 
-Verify puzzle integrity
+- Verify puzzle integrity
 
-Prevent tampering
+- Prevent tampering
 
-🐳 Phase 5 — Dockerization
+### 🐳 Phase 5 — Dockerization
 
-Separate services:
+- Separate services:
 
-Game server
+- Game server
 
-ML service
+- ML service
 
-Blockchain service
+- Blockchain service
 
-Docker Compose orchestration
+- Docker Compose orchestration
 
-💡 Learning Outcomes
+### 💡 Learning Outcomes
 
 This project demonstrates:
 
-Real-time distributed system design
+- Real-time distributed system design
 
-State synchronization across clients
+- State synchronization across clients
 
-Server-authoritative architecture
+- Server-authoritative architecture
 
-Game logic enforcement
+- Game logic enforcement
 
-Foundations of MLOps pipelines
+-Foundations of MLOps pipelines
 
-Practical use of cryptographic verification (planned)
+- Practical use of cryptographic verification (planned)
 
-📌 Future Improvements
+### 📌 Future Improvements
 
-GUI (React / Streamlit)
+- GUI (React / Streamlit)
 
-Matchmaking system
+- Matchmaking system
 
-Spectator mode
+- Spectator mode
 
-Leaderboards
+- Leaderboards
 
-AI opponent (ML agent)
+- AI opponent (ML agent)
 
-Persistent storage (Redis/PostgreSQL)
-
-🧑‍💻 Author
-
-Built as part of an MLOps + Systems Engineering learning journey.
-
-📄 License
-
-MIT License (or choose your preferred license)
+- Persistent storage (Redis/PostgreSQL)
 
