@@ -176,7 +176,7 @@ websocat ws://127.0.0.1:8000/ws/<game_id>
 
 - Docker Compose orchestration
 
-### 💡 Learning Outcomes
+## 💡 Learning Outcomes
 
 This project demonstrates:
 
@@ -192,7 +192,7 @@ This project demonstrates:
 
 - Practical use of cryptographic verification (planned)
 
-### 📌 Future Improvements
+## 📌 Future Improvements
 
 - GUI (React / Streamlit)
 
