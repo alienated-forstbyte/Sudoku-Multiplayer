@@ -2,6 +2,7 @@ import uuid
 import time
 import random
 import json
+import requests
 from ml.predict import predict_difficulty
 from engine.generator import generate_full_board, remove_numbers
 from blockchain.ledger import Blockchain
@@ -12,12 +13,22 @@ class GameManager:
         self.games = {}  # game_id -> game data
         self.blockchain = Blockchain()
 
+    def is_expired(self, game_id):
+        game = self.games.get(game_id)
+        if not game:
+            return True
 
+        if game["started"]:
+            return False
+
+        return (time.time() - game["created_at"]) > game["expiry"]
 
     def create_game(self):
         game_id = str(uuid.uuid4())
-
+        
         self.games[game_id] = {
+            "created_at": time.time(),
+            "expiry": 25,
             "players": [],
             "boards": {},
             "solutions": {},
@@ -33,6 +44,9 @@ class GameManager:
         return game_id
 
     def join_game(self, game_id, websocket):
+        if self.is_expired(game_id):
+            del self.games[game_id]
+            return None
         if game_id not in self.games:
             return None
 
@@ -54,7 +68,12 @@ class GameManager:
         game["scores"][player_id] = 0
 
         # ML
-        predicted_difficulty = predict_difficulty(puzzle)
+        response = requests.post(
+            "http://ml_service:8001/predict",
+            json={"board": puzzle}
+        )
+
+        predicted_difficulty = response.json()["difficulty"]
         game["difficulties"][player_id] = predicted_difficulty
 
         # Blockchain (last)
@@ -76,8 +95,6 @@ class GameManager:
 
         puzzle = game["boards"][player_id]
         stored_hash = game["hashes"][player_id]
-
-        current_hash = self.blockchain.chain[-1].compute_hash()
 
         return self.blockchain.verify(
             json.dumps(puzzle, sort_keys=True),

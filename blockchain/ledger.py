@@ -29,5 +29,6 @@ class Blockchain:
         return new_block.hash
 
     def verify(self, data, hash_value):
+        import hashlib
         computed = hashlib.sha256(data.encode()).hexdigest()
         return computed == hash_value

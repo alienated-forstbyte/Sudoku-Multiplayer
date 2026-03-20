@@ -7,7 +7,7 @@ WORKDIR /app
 COPY . .
 
 # Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn websockets scikit-learn joblib pandas
+RUN pip install --no-cache-dir fastapi uvicorn websockets scikit-learn joblib pandas requests
 
 # Expose port
 EXPOSE 8000

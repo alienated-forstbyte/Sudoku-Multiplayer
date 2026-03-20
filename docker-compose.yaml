@@ -1,6 +1,12 @@
 services:
-  sudoku-server:
+  game-server:
     build: .
-    container_name: sudoku-server
     ports:
       - "8000:8000"
+    depends_on:
+      - ml_service
+
+  ml_service:
+    build: ./ml_service
+    ports:
+      - "8001:8001"

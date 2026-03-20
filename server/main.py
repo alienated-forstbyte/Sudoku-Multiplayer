@@ -57,6 +57,13 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
     try:
         while True:
+            if manager.is_expired(game_id):
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Room expired"
+                }))
+                await websocket.close()
+                return
             data = await websocket.receive_text()
             try:
                 message = json.loads(data)
