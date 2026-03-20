@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sudoku Multiplayer</title>
+    <style>
+        table { border-collapse: collapse; }
+        td {
+            width: 40px;
+            height: 40px;
+            text-align: center;
+            border: 1px solid black;
+        }
+        input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Sudoku Multiplayer</h2>
+<p id="status">Connecting...</p>
+
+<table id="board"></table>
+
+<input id="gameIdInput" placeholder="Enter Game ID">
+<button onclick="joinGame()">Join Game</button>
+
+<script>
+let ws = null;
+
+async function startGame() {
+    try {
+        // Step 1: Create game
+        const res = await fetch("/create", { method: "POST" });
+        const data = await res.json();
+
+        const gameId = data.game_id;
+        console.log("Game ID:", gameId);
+
+        document.getElementById("status").innerText = "Game ID: " + gameId;
+
+        // Step 2: Connect WebSocket
+        connect(gameId);
+
+    } catch (err) {
+        console.error("Error creating game:", err);
+        document.getElementById("status").innerText = "Error creating game";
+    }
+}
+
+function joinGame() {
+    const id = document.getElementById("gameIdInput").value;
+    connect(id);
+}
+
+function connect(gameId) {
+    ws = new WebSocket(`ws://${window.location.host}/ws/${gameId}`);
+
+    ws.onopen = () => {
+        console.log("Connected to server");
+        document.getElementById("status").innerText += " | Connected";
+    };
+
+    ws.onmessage = (event) => {
+        console.log("Received:", event.data);
+        const data = JSON.parse(event.data);
+
+        if (data.type === "waiting") {
+            document.getElementById("status").innerText = "Waiting for second player...";
+        }
+
+        if (data.type === "start") {
+            document.getElementById("status").innerText = "Game Started!";
+            renderBoard(data.board);
+        }
+
+        if (data.type === "update") {
+            renderBoard(data.your_board);
+        }
+    };
+
+    ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        document.getElementById("status").innerText = "Connection error";
+    };
+}
+
+function renderBoard(board) {
+    const table = document.getElementById("board");
+    table.innerHTML = "";
+
+    for (let i = 0; i < 9; i++) {
+        const row = document.createElement("tr");
+
+        for (let j = 0; j < 9; j++) {
+            const cell = document.createElement("td");
+            const input = document.createElement("input");
+
+            input.value = board[i][j] || "";
+
+            input.onchange = () => {
+                ws.send(JSON.stringify({
+                    type: "move",
+                    row: i,
+                    col: j,
+                    value: parseInt(input.value)
+                }));
+            };
+
+            cell.appendChild(input);
+            row.appendChild(cell);
+        }
+
+        table.appendChild(row);
+    }
+}
+
+// 🚀 Start automatically
+startGame();
+</script>
+</body>
+</html>

@@ -1,10 +1,18 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from server.game_manager import GameManager
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import json
 
 app = FastAPI()
 manager = GameManager()
 
+app.mount("/static", StaticFiles(directory="client"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def get_ui():
+    with open("client/index.html") as f:
+        return f.read()
 
 @app.websocket("/ws/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
@@ -24,8 +32,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     await websocket.send_text(json.dumps({
         "type": "init",
         "player_id": player_id,
-        "board": game["boards"][player_id],
         "started": game["started"],
+        "hash": game["hashes"][player_id],
         "time_left": manager.get_time_left(game_id),
         "difficulty": game["difficulties"][player_id]
     }))
@@ -38,9 +46,11 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
         }))
     else:
         # Game just started → notify both players
-        for player in game["players"]:
+        for i,player in enumerate(game["players"]):
             await player.send_text(json.dumps({
                 "type": "start",
+                "difficulty": game["difficulties"][i],
+                "board": game["boards"][i],
                 "message": "Game started!",
                 "time_left": manager.get_time_left(game_id)
             }))
@@ -83,6 +93,13 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                         "winner": game["winner"],
                         "scores": game["scores"]
                     }))
+                continue
+
+            if not manager.verify_puzzle(game_id, player_id):
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Puzzle integrity compromised!"
+                }))
                 continue
 
             # Handle move

@@ -1,12 +1,17 @@
 import uuid
 import time
 import random
-from ml.predit import predict_difficulty
+import json
+from ml.predict import predict_difficulty
 from engine.generator import generate_full_board, remove_numbers
+from blockchain.ledger import Blockchain
+
 
 class GameManager:
     def __init__(self):
         self.games = {}  # game_id -> game data
+        self.blockchain = Blockchain()
+
 
 
     def create_game(self):
@@ -18,6 +23,7 @@ class GameManager:
             "solutions": {},
             "scores": {},
             "difficulties": {},
+            "hashes": {},
             "start_time": None,
             "time_limit": 600,
             "started": False,
@@ -42,12 +48,18 @@ class GameManager:
         full = generate_full_board()
         puzzle = remove_numbers(full, random.choice(["easy","medium","hard"]))
 
-        predicted_difficulty = predict_difficulty(puzzle)
-        game["difficulties"][player_id] = predicted_difficulty
-
+        # store first
         game["boards"][player_id] = puzzle
         game["solutions"][player_id] = full
         game["scores"][player_id] = 0
+
+        # ML
+        predicted_difficulty = predict_difficulty(puzzle)
+        game["difficulties"][player_id] = predicted_difficulty
+
+        # Blockchain (last)
+        puzzle_hash = self.blockchain.add_block(json.dumps(puzzle, sort_keys=True))
+        game["hashes"][player_id] = puzzle_hash
 
         # Start game when 2 players join
         if len(game["players"]) == 2:
@@ -58,6 +70,19 @@ class GameManager:
 
     def get_game(self, game_id):
         return self.games.get(game_id)
+    
+    def verify_puzzle(self, game_id, player_id):
+        game = self.games[game_id]
+
+        puzzle = game["boards"][player_id]
+        stored_hash = game["hashes"][player_id]
+
+        current_hash = self.blockchain.chain[-1].compute_hash()
+
+        return self.blockchain.verify(
+            json.dumps(puzzle, sort_keys=True),
+            stored_hash
+        )
     
     def apply_move(self, game_id, player_id, row, col, value):
         game = self.games.get(game_id)
