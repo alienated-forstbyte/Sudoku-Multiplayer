@@ -64,14 +64,15 @@ This project demonstrates **end-to-end MLOps integration inside a distributed sy
 ## 🏗️ System Architecture
 
 
-Client (WebSocket)
+Client (WebSocket) 
+```
 ↓
 FastAPI Server (Game Engine)
 ↓
 ML Model (Difficulty Prediction)
 ↓
 Game State Manager
-
+```
 
 ---
 
