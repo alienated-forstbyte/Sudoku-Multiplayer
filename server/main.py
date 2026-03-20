@@ -23,17 +23,39 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     # Send initial state
     await websocket.send_text(json.dumps({
         "type": "init",
-        "board": game["board"],
         "player_id": player_id,
-        "your_turn": game["turn"] == player_id,
-        "time_left": manager.get_time_left(game_id)
+        "board": game["boards"][player_id],
+        "started": game["started"],
+        "time_left": manager.get_time_left(game_id),
+        "difficulty": game["difficulties"][player_id]
     }))
+
+    # Waiting state
+    if not game["started"]:
+        await websocket.send_text(json.dumps({
+            "type": "waiting",
+            "message": "Waiting for second player..."
+        }))
+    else:
+        # Game just started → notify both players
+        for player in game["players"]:
+            await player.send_text(json.dumps({
+                "type": "start",
+                "message": "Game started!",
+                "time_left": manager.get_time_left(game_id)
+            }))
 
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
-
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Invalid JSON format"
+                }))
+                continue
             # Stop if game already finished
             if game["winner"] is not None:
                 await websocket.send_text(json.dumps({
@@ -42,7 +64,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 }))
                 continue
 
-            # ⏱ Timeout check
+            # Timeout check
             if manager.check_timeout(game_id):
                 if game["winner"] is None:
                     scores = game["scores"]
@@ -54,7 +76,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     else:
                         game["winner"] = "draw"
 
-                # Broadcast to all players
                 for player in game["players"]:
                     await player.send_text(json.dumps({
                         "type": "game_over",
@@ -64,51 +85,48 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     }))
                 continue
 
-            # Handle moves
+            # Handle move
             if message["type"] == "move":
-
-                print("TURN BEFORE:", game["turn"])
-                print("PLAYER:", player_id)
-
-                success, msg = manager.apply_move(game_id, row, col, value)
-
-                print("SUCCESS:", success)
-
-                if success:
-                    game["turn"] = 1 - game["turn"]
-
-                print("TURN AFTER:", game["turn"])
-
                 row = message["row"]
                 col = message["col"]
                 value = message["value"]
 
-                success, msg = manager.apply_move(game_id, row, col, value)
+                board = game["boards"][player_id]
+                solution = game["solutions"][player_id]
 
-                if success:
-                    # Update score
+                # Validate move
+                if board[row][col] != 0:
+                    success = False
+                    msg = "Cell already filled"
+
+                elif solution[row][col] != value:
+                    success = False
+                    msg = "Incorrect move"
+
+                else:
+                    board[row][col] = value
                     game["scores"][player_id] += 1
+                    success = True
+                    msg = "Correct move"
 
-                    # Switch turn
-                    game["turn"] = 1 - game["turn"]
-
-                    # Check win condition (full board)
-                    if manager.check_win(game_id):
+                    # Check win (this player)
+                    if manager.check_win_player(game_id, player_id):
                         game["winner"] = player_id
 
+                # Build response
                 response = {
                     "type": "update",
                     "success": success,
                     "message": msg,
-                    "board": game["board"],
-                    "turn": game["turn"],
+                    "difficulty": game["difficulties"][player_id],
+                    "your_board": board,
                     "scores": game["scores"],
                     "time_left": manager.get_time_left(game_id),
                     "game_over": game["winner"] is not None,
                     "winner": game["winner"]
                 }
 
-                # Broadcast update
+                # Broadcast to all players
                 for player in game["players"]:
                     await player.send_text(json.dumps(response))
 

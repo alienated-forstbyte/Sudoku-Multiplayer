@@ -1,208 +1,121 @@
-# 🧩 Multiplayer Sudoku with ML & Blockchain (MLOps Project)
+A **real-time multiplayer Sudoku platform** featuring:
 
-## 📌 Overview
-This project is a **containerized multiplayer Sudoku platform** designed to demonstrate concepts across:
+- 🎮 Competitive gameplay over WebSockets  
+- 🤖 ML-powered difficulty classification  
+- 🐳 Fully containerized deployment (Docker)  
+- ⚙️ Scalable backend architecture  
 
-- Backend systems (FastAPI, WebSockets)
-- Distributed systems (real-time multiplayer sync)
-- MLOps (upcoming: difficulty prediction model)
-- Cryptography / Blockchain (upcoming: puzzle verification)
-
-Players connect to a central server and solve the same Sudoku puzzle in a **turn-based, time-constrained competitive environment**.
+This project demonstrates **end-to-end MLOps integration inside a distributed system**.
 
 ---
 
-## 🚀 Features (Current)
+## 🧠 Key Highlights
 
-### 🎮 Multiplayer Gameplay
-- Real-time multiplayer using WebSockets
-- Game rooms with unique IDs
-- Turn-based move system
+- Built a **real-time multiplayer system** using FastAPI + WebSockets  
+- Designed an ML model (**96% accuracy**) for Sudoku difficulty prediction  
+- Engineered features based on **constraint density & candidate complexity**  
+- Integrated ML inference directly into backend game logic  
+- Containerized the system using Docker for reproducibility  
+
+---
+
+## 🎮 Features
+
+### 🔴 Real-Time Multiplayer
+- Simultaneous gameplay (no turn system)
+- Independent boards per player
 - Server-authoritative validation
+- Game rooms with unique IDs
+
+---
 
 ### 🧠 Sudoku Engine
-- Algorithmic Sudoku generator (backtracking)
-- Puzzle creation with difficulty presets
-- Solver for validation
-
-### ⚖️ Game Mechanics
-- Strict move validation (checked against solution)
-- Score tracking per player
-- Turn enforcement
-
-### ⏱ Timer System
-- 10-minute time limit per game
-- Server-side timer (anti-cheat)
-- Game ends on:
-  - Puzzle completion OR
-  - Time expiration
-
-### 🏆 Win Conditions
-- First to complete board → wins
-- If time expires → player with highest score wins
-- Tie → draw
+- Backtracking-based puzzle generator
+- Solver for correctness validation
+- Dynamic puzzle generation per player
 
 ---
 
-## 🧱 Project Structure
+### 🤖 ML Difficulty Prediction
+- RandomForest model trained on engineered features
+- Features include:
+  - Constraint variance
+  - Candidate complexity
+  - Density metrics
+- Real-time difficulty prediction during gameplay
 
+---
+
+### ⏱ Game Mechanics
+- 10-minute timer per game
+- Score-based competition
+- Instant win on completion
+- Timeout → highest score wins
+
+---
+
+### 🐳 Dockerized Deployment
+- One-command startup using Docker Compose
+- Fully reproducible environment
+- Ready for scaling
+
+---
+
+## 🏗️ System Architecture
+
+
+Client (WebSocket)
+↓
+FastAPI Server (Game Engine)
+↓
+ML Model (Difficulty Prediction)
+↓
+Game State Manager
+
+
+---
+
+## ⚙️ How It Works
+
+1. Player joins a game room  
+2. Server generates Sudoku puzzle  
+3. ML model predicts difficulty  
+4. Players solve independently in real-time  
+5. Scores update dynamically  
+6. Winner determined by completion or timer  
+
+---
+
+## 🧪 Demo
+
+```bash
+# Create game
+curl -X POST http://localhost:8000/create
+
+# Connect player
+websocat ws://localhost:8000/ws/<game_id>
+
+```
+## 🧱 Project Structure
 ```
 sudoku/
 │
-├── engine/
-│ ├── solver.py
-│ ├── generator.py
-│ └── utils.py
-│
-├── server/
-│ ├── main.py
-│ ├── game_manager.py
-│
-├── tests/
-│ └── test_engine.py
-│
+├── engine/        # Sudoku generator & solver
+├── server/        # FastAPI + game manager
+├── ml/            # Dataset, features, training, inference
+├── tests/         # Unit tests
+├── Dockerfile
+├── docker-compose.yml
 └── README.md
 ```
-
----
-
 ## ⚙️ Tech Stack
 
-| Layer        | Technology |
-|-------------|-----------|
-| Backend     | FastAPI |
-| Realtime    | WebSockets |
-| Language    | Python 3.11 |
-| Testing     | Pytest (basic) |
-| Container   | Docker (planned) |
-| ML (planned)| Scikit-learn / XGBoost |
-| Blockchain (planned) | Custom ledger / Ethereum |
+Backend: FastAPI, WebSockets
 
----
+ML: Scikit-learn (RandomForest)
 
-## ▶️ Running the Project
+Data: Custom feature engineering pipeline
 
-### 1. Install dependencies
-```bash
-pip install fastapi uvicorn websockets
-```
-2. Start the server
-```
-uvicorn server.main:app --reload
-```
-3. Create a game
-```
-curl -X POST http://127.0.0.1:8000/create
-```
-Response:
-```
-{
-  "game_id": "your-game-id"
-}
-```
-4. Connect players
+Deployment: Docker, Docker Compose
 
-Open two terminals:
-```
-websocat ws://127.0.0.1:8000/ws/<game_id>
-```
-5. Send a move
-```
-{
-  "type": "move",
-  "row": 0,
-  "col": 1,
-  "value": 5
-}
-```
-### 🔄 Game Flow
-
-- Player joins game
-
-- Server assigns:
-
-- player_id
-
-- initial board
-
-- Players alternate turns
-
-- Server validates moves
-
-- Scores update
-
-- Game ends when:
-
-- board is complete OR
-
-- timer expires
-
-### ⚠️ Current Limitations
-
-- Puzzle may have multiple solutions
-
-- Only "correct" moves allowed (strict mode)
-
-- No UI (CLI/Web UI planned)
-
-- Timer depends on client activity (no background scheduler yet)
-
-## 🧠 Upcoming Features
-### 🤖 Phase 3 — ML Integration
-
-- Train model to predict puzzle difficulty
-
-- Feature engineering from Sudoku structure
-
-- Dataset generation pipeline
-
-### ⛓️ Phase 4 — Blockchain Integration
-
-- Store puzzle hash on blockchain
-
-- Verify puzzle integrity
-
-- Prevent tampering
-
-### 🐳 Phase 5 — Dockerization
-
-- Separate services:
-
-- Game server
-
-- ML service
-
-- Blockchain service
-
-- Docker Compose orchestration
-
-## 💡 Learning Outcomes
-
-This project demonstrates:
-
-- Real-time distributed system design
-
-- State synchronization across clients
-
-- Server-authoritative architecture
-
-- Game logic enforcement
-
--Foundations of MLOps pipelines
-
-- Practical use of cryptographic verification (planned)
-
-## 📌 Future Improvements
-
-- GUI (React / Streamlit)
-
-- Matchmaking system
-
-- Spectator mode
-
-- Leaderboards
-
-- AI opponent (ML agent)
-
-- Persistent storage (Redis/PostgreSQL)
-
+Language: Python

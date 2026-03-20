@@ -28,12 +28,13 @@ def generate_full_board():
 
 def remove_numbers(board, difficulty="medium"):
     difficulty_map = {
-        "easy": 30,
-        "medium": 40,
-        "hard": 50
+        "easy": (25, 35),
+        "medium": (35, 45),
+        "hard": (45, 60)
     }
 
-    remove_count = difficulty_map.get(difficulty, 40)
+    remove_range = difficulty_map.get(difficulty, (35, 45))
+    remove_count = random.randint(*remove_range)
 
     puzzle = [row[:] for row in board]
 

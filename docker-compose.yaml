@@ -1,0 +1,6 @@
+services:
+  sudoku-server:
+    build: .
+    container_name: sudoku-server
+    ports:
+      - "8000:8000"
