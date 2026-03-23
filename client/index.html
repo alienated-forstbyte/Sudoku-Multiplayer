@@ -1,24 +1,32 @@
+
 <!DOCTYPE html>
 <html>
 <head>
     <title>Sudoku Multiplayer</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+
+<script src="/static/app.js"></script>
+
 <body>
 
 <h2>Sudoku Multiplayer</h2>
 
-<p id="status">Connecting...</p>
+<!-- Controls -->
+<button onclick="startGame()">Create Game</button>
+
+<input id="gameIdInput" placeholder="Enter Game ID">
+<button onclick="joinGame()">Join Game</button>
+
+<!-- Game Info -->
+<p id="status">Idle</p>
 <p id="difficulty"></p>
 <p id="timer"></p>
 <p id="scores"></p>
 
+<!-- Board -->
 <table id="board"></table>
-
-<script src="/static/app.js"></script>
-
-<input id="gameIdInput" placeholder="Enter Game ID">
-<button onclick="joinGame()">Join</button>
 
 </body>
 </html>
+

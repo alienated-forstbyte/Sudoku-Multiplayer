@@ -7,6 +7,14 @@ from ml.predict import predict_difficulty
 from engine.generator import generate_full_board, remove_numbers
 from blockchain.ledger import Blockchain
 
+# game = {
+#     "board": ONE shared board,
+#     "solution": ONE solution,
+#     "difficulty": ONE value,
+#     "hash": ONE hash,
+#     "players": [],
+#     "scores": {},
+# }
 
 class GameManager:
     def __init__(self):
@@ -24,17 +32,37 @@ class GameManager:
         return (time.time() - game["created_at"]) > game["expiry"]
 
     def create_game(self):
+        full = generate_full_board()
+        difficulty = random.choice(["easy", "medium", "hard"])
+        puzzle = remove_numbers(full, difficulty)
+
+        # ML (optional)
+        response = requests.post(
+            "http://ml_service:8001/predict",
+            json={"board": puzzle}
+        )
+        predicted_difficulty = response.json()["difficulty"]
+
+        # Blockchain
+        puzzle_hash = self.blockchain.add_block(
+            json.dumps(puzzle, sort_keys=True)
+        )
+
         game_id = str(uuid.uuid4())
-        
+
         self.games[game_id] = {
             "created_at": time.time(),
             "expiry": 25,
+
             "players": [],
-            "boards": {},
-            "solutions": {},
-            "scores": {},
-            "difficulties": {},
-            "hashes": {},
+
+            "board": puzzle,
+            "solution": full,
+            "difficulty": predicted_difficulty,
+            "hash": puzzle_hash,
+
+            "scores": {0: 0, 1: 0},
+
             "start_time": None,
             "time_limit": 600,
             "started": False,
@@ -44,10 +72,11 @@ class GameManager:
         return game_id
 
     def join_game(self, game_id, websocket):
+        if game_id not in self.games:
+            return None
+
         if self.is_expired(game_id):
             del self.games[game_id]
-            return None
-        if game_id not in self.games:
             return None
 
         game = self.games[game_id]
@@ -58,29 +87,8 @@ class GameManager:
         game["players"].append(websocket)
         player_id = len(game["players"]) - 1
 
-        # Generate board for this player
-        full = generate_full_board()
-        puzzle = remove_numbers(full, random.choice(["easy","medium","hard"]))
-
-        # store first
-        game["boards"][player_id] = puzzle
-        game["solutions"][player_id] = full
         game["scores"][player_id] = 0
 
-        # ML
-        response = requests.post(
-            "http://ml_service:8001/predict",
-            json={"board": puzzle}
-        )
-
-        predicted_difficulty = response.json()["difficulty"]
-        game["difficulties"][player_id] = predicted_difficulty
-
-        # Blockchain (last)
-        puzzle_hash = self.blockchain.add_block(json.dumps(puzzle, sort_keys=True))
-        game["hashes"][player_id] = puzzle_hash
-
-        # Start game when 2 players join
         if len(game["players"]) == 2:
             game["started"] = True
             game["start_time"] = time.time()
@@ -90,15 +98,12 @@ class GameManager:
     def get_game(self, game_id):
         return self.games.get(game_id)
     
-    def verify_puzzle(self, game_id, player_id):
+    def verify_puzzle(self, game_id):
         game = self.games[game_id]
 
-        puzzle = game["boards"][player_id]
-        stored_hash = game["hashes"][player_id]
-
         return self.blockchain.verify(
-            json.dumps(puzzle, sort_keys=True),
-            stored_hash
+            json.dumps(game["board"], sort_keys=True),
+            game["hash"]
         )
     
     def apply_move(self, game_id, player_id, row, col, value):
@@ -106,8 +111,8 @@ class GameManager:
         if not game:
             return False, "Game not found"
 
-        board = game["boards"][player_id]
-        solution = game["solutions"][player_id]
+        board = game["board"]
+        solution = game["solution"]
 
         if board[row][col] != 0:
             return False, "Cell already filled"

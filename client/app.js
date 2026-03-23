@@ -1,22 +1,30 @@
 let ws = null;
 let currentGameId = null;
 
+let timeLeft = 0;
+let timerInterval = null;
+
 async function startGame() {
+    console.log("Create Game clicked");
+
     try {
         const res = await fetch("/create", { method: "POST" });
+
+        console.log("Response:", res);
+
         const data = await res.json();
 
-        const gameId = data.game_id;
-        currentGameId = gameId;
-        console.log("Game ID:", gameId);
+        console.log("Data:", data);
+
+        currentGameId = data.game_id;
 
         document.getElementById("status").innerText =
-            "Game ID: " + gameId;
+            "Game ID: " + currentGameId;
 
-        connect(gameId);
+        connect(currentGameId);
 
     } catch (err) {
-        console.error(err);
+        console.error("ERROR:", err);
         document.getElementById("status").innerText =
             "Error creating game";
     }
@@ -43,6 +51,8 @@ function connect(gameId) {
         }
 
         if (data.type === "start") {
+            timeLeft = data.time_left;
+            startTimer();
             document.getElementById("status").innerText = "Game Started!";
             document.getElementById("difficulty").innerText =
                 "Difficulty: " + data.difficulty;
@@ -51,15 +61,11 @@ function connect(gameId) {
         }
 
         if (data.type === "update") {
+            timeLeft = Math.min(timeLeft, data.time_left);
             renderBoard(data.your_board);
 
             document.getElementById("scores").innerText =
                 "Scores: " + JSON.stringify(data.scores);
-        }
-
-        if (data.time_left !== undefined) {
-            document.getElementById("timer").innerText =
-                "Time Left: " + data.time_left + "s";
         }
 
         if (data.game_over) {
@@ -76,7 +82,26 @@ function connect(gameId) {
 
 function joinGame() {
     const id = document.getElementById("gameIdInput").value;
-    connect(id);
+
+    currentGameId = id;
+    connect(id);  // only here
+}
+
+function startTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    timerInterval = setInterval(() => {
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            document.getElementById("timer").innerText = "Time Up!";
+            return;
+        }
+
+        document.getElementById("timer").innerText =
+            "Time Left: " + timeLeft + "s";
+
+        timeLeft--;
+    }, 1000);
 }
 
 function renderBoard(board) {
@@ -120,5 +145,3 @@ function renderBoard(board) {
     }
 }
 
-// start automatically
-startGame();
