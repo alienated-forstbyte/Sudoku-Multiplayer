@@ -3,7 +3,6 @@ import time
 import random
 import json
 import requests
-from ml.predict import predict_difficulty
 from engine.generator import generate_full_board, remove_numbers
 
 

@@ -39,9 +39,9 @@ A room contains:
 There is no database or message broker for game state. This makes the code easy
 to study, but all connections for a room must reach the same Python process.
 
-Move payloads are not yet validated on the server beyond JSON parsing. Step 1
-in [`PLAN.md`](../PLAN.md) adds bounds/type checks and protocol integration
-tests.
+Move payloads are validated by the pure helper in `server/protocol.py` before
+the server indexes the board. The WebSocket integration tests seed room state
+directly and stub puzzle verification, so they run without Docker services.
 
 ### Sudoku engine
 
@@ -132,8 +132,8 @@ here; keep this file focused on how the system works today.
 
 Summary of the active order:
 
-1. Request validation + WebSocket integration tests (**next**)
-2. Unify ML training/serving feature pipeline
+1. Request validation + WebSocket integration tests (**done**)
+2. Unify ML training/serving feature pipeline (**next**)
 3. Env-based service URLs / credentials
 4. Async HTTP client with timeouts
 5. Typed room state models

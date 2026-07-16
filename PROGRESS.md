@@ -11,8 +11,8 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Core 2-player shared-board loop | Working (manual playtest) |
 | Hash-chain integrity on moves | Fixed |
 | Docs / Makefile / run script | In place |
-| WebSocket input validation | Not started (Step 1) |
-| ML train/serve feature parity | Broken / planned (Step 2) |
+| WebSocket input validation | Complete (Step 1) |
+| ML train/serve feature parity | Next (Step 2) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -39,6 +39,23 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 - Added [`tests/test_blockchain.py`](tests/test_blockchain.py) (round-trip,
   tamper, original-vs-live board).
 
+### Step 1 — Validation and WebSocket integration tests
+
+- Added the framework-independent move validator in `server/protocol.py`.
+- Rejects non-object messages, unsupported types, missing fields, non-integer
+  values (including booleans), and out-of-range coordinates/values.
+- Rejects moves until the second player joins.
+- Added validator unit tests and offline WebSocket tests for `init`, `waiting`,
+  `start`, malformed JSON, unsupported messages, invalid and incorrect moves,
+  successful broadcasts, scoring, and completion.
+- Removed the unused import that loaded a model while importing the game
+  server, allowing protocol tests to run without an ML artifact.
+- Updated `docs/websocket-protocol.md`.
+- Follow-up after playtest: resilient `broadcast()` so a dead peer cannot abort
+  move delivery; integrity-service failures return an `error` instead of
+  killing the WebSocket handler; client shows move feedback text for correct /
+  incorrect / error results.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
@@ -50,24 +67,22 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 1._
+_Nothing actively in progress. Next work is Step 2._
 
 ## Next
 
-**Step 1 — Request validation and WebSocket integration tests**
+**Step 2 — Unify the ML training and serving feature pipeline**
 
 See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
 
 Short checklist:
 
-- [ ] Add pure move validator (`row`/`col`/`value` types and bounds)
-- [ ] Reject unknown message types and pre-start moves
-- [ ] Wire validator into `server/main.py`
-- [ ] Stub or inject ML / hash HTTP for offline tests
-- [ ] Unit tests for the validator
-- [ ] Integration tests for join / start / move / invalid move
-- [ ] Update `docs/websocket-protocol.md`
-- [ ] Mark Step 1 done here and advance Current focus in `PLAN.md`
+- [ ] Inventory training, local inference, and service features
+- [ ] Create one named, ordered feature contract
+- [ ] Reuse it in dataset generation, training, and serving
+- [ ] Add parity and prediction tests
+- [ ] Retrain and place the model artifact
+- [ ] Verify `make train`, `make test`, and `/predict`
 
 ## Deferred
 

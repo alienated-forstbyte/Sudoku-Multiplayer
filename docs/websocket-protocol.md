@@ -25,8 +25,17 @@ Attempts to place a value on the shared board.
 ```
 
 Rows and columns are zero-based. Values are Sudoku digits from 1 through 9.
-The browser enforces these ranges, but the current server does not validate
-types or bounds before indexing the board.
+The server validates the message before reading or changing the board:
+
+- the message must be a JSON object with `type: "move"`;
+- `row`, `col`, and `value` are required;
+- all three fields must be JSON integers (booleans, floats, and strings are
+  rejected);
+- `row` and `col` must be between 0 and 8;
+- `value` must be between 1 and 9;
+- a valid move is rejected until the second player has joined.
+
+Extra object fields are currently ignored.
 
 ## Server messages
 
@@ -115,7 +124,9 @@ handling this event type, so timeout UI handling is incomplete.
 ### `error`
 
 Sent for an invalid/full/expired room, malformed JSON, or a move received after
-the game has a winner.
+the game has a winner. It is also sent for unsupported message types, missing
+move fields, invalid field types/ranges, moves before game start, and failed
+puzzle-integrity checks.
 
 ```json
 {
@@ -131,10 +142,6 @@ Some errors close the socket; others leave it connected.
 - Only `move` is a defined client message type.
 - The server does not yet return a structured error code.
 - There is no protocol version or reconnect/resume token.
-- Players can currently send moves before the second player joins.
 - Timeout detection depends on incoming messages.
 - A disconnect removes the WebSocket from the list, so reconnecting can change
   the index-to-player relationship.
-
-These constraints should be covered by integration tests before extending the
-protocol.
