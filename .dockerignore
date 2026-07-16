@@ -1,7 +1,54 @@
+# Keep the build context small. Note: trained model artifacts (*.pkl) are
+# intentionally NOT ignored — the game-server and ml_service images copy
+# sudoku_model.pkl at build time.
+
+# Version control / CI
+.git
+.gitignore
+.dockerignore
+
+# Python caches and virtualenvs
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.venv/
+venv/
+env/
+ENV/
+
+# Test / coverage
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+coverage.xml
+htmlcov/
+tests/
+
+# Local env / secrets
 .env
-.git
-.gitignore
+.env.*
+
+# Docs and project tracking (not needed at runtime)
+docs/
+*.md
+
+# Editor / OS / backup scratch
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+*.ak
+*.orig
+.DS_Store
+Thumbs.db
+
+# Stray artifacts
+backup.sql
+*.log
+*.tar
+*.gz
+
+# Third-party / vendored plugins
+ClickHeat-Plugin/

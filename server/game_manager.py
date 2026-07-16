@@ -5,21 +5,17 @@ import json
 import requests
 from ml.predict import predict_difficulty
 from engine.generator import generate_full_board, remove_numbers
-from blockchain.ledger import Blockchain
 
-# game = {
-#     "board": ONE shared board,
-#     "solution": ONE solution,
-#     "difficulty": ONE value,
-#     "hash": ONE hash,
-#     "players": [],
-#     "scores": {},
-# }
 
 class GameManager:
+    """Own process-local rooms and coordinate the supporting services.
+
+    Room state is intentionally kept in a dictionary for this prototype. It is
+    lost on restart and cannot be shared by multiple server workers.
+    """
+
     def __init__(self):
         self.games = {}  # game_id -> game data
-        self.blockchain = Blockchain()
 
     def is_expired(self, game_id):
         game = self.games.get(game_id)
@@ -32,21 +28,32 @@ class GameManager:
         return (time.time() - game["created_at"]) > game["expiry"]
 
     def create_game(self):
+        """Generate a puzzle, classify and hash it, then store a new room.
+
+        The two HTTP calls are synchronous and currently required: an
+        unavailable ML or hash-chain service causes room creation to fail.
+        Service names are Docker Compose DNS names.
+        """
         full = generate_full_board()
         difficulty = random.choice(["easy", "medium", "hard"])
         puzzle = remove_numbers(full, difficulty)
 
-        # ML (optional)
+        # The generated label chooses clue count; the model supplies the label
+        # shown to players.
         response = requests.post(
             "http://ml_service:8001/predict",
             json={"board": puzzle}
         )
         predicted_difficulty = response.json()["difficulty"]
 
-        # Blockchain
-        puzzle_hash = self.blockchain.add_block(
-            json.dumps(puzzle, sort_keys=True)
+        # Hash the immutable original puzzle; live ``board`` may change later.
+        original_board = [row[:] for row in puzzle]
+        response = requests.post(
+            "http://blockchain:8002/add",
+            json={"data": json.dumps(original_board)}
         )
+
+        puzzle_hash = response.json()["hash"]
 
         game_id = str(uuid.uuid4())
 
@@ -57,6 +64,7 @@ class GameManager:
             "players": [],
 
             "board": puzzle,
+            "original_board": original_board,
             "solution": full,
             "difficulty": predicted_difficulty,
             "hash": puzzle_hash,
@@ -72,6 +80,12 @@ class GameManager:
         return game_id
 
     def join_game(self, game_id, websocket):
+        """Add one connection and return its player ID, or ``None``.
+
+        Player IDs currently match indexes in ``players``. Removing a
+        disconnected socket can therefore make reconnect behavior ambiguous;
+        persistent player records would be safer in a production protocol.
+        """
         if game_id not in self.games:
             return None
 
@@ -99,12 +113,22 @@ class GameManager:
         return self.games.get(game_id)
     
     def verify_puzzle(self, game_id):
+        """Ask the hash-chain service whether the original puzzle is authentic.
+
+        Verification always uses ``original_board``, never the live shared
+        board, so accepted moves do not invalidate integrity checks.
+        """
         game = self.games[game_id]
 
-        return self.blockchain.verify(
-            json.dumps(game["board"], sort_keys=True),
-            game["hash"]
+        response = requests.post(
+            "http://blockchain:8002/verify",
+            json={
+                "data": json.dumps(game["original_board"]),
+                "hash": game["hash"]
+            }
         )
+
+        return response.json()["valid"]
     
     def apply_move(self, game_id, player_id, row, col, value):
         game = self.games.get(game_id)

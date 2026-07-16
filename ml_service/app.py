@@ -22,6 +22,12 @@ class BoardInput(BaseModel):
 
 
 def extract_features(board):
+    """Build the ordered numeric vector consumed by the serialized model.
+
+    A model does not match features by function name: positions must be
+    identical to the columns used during training. Keep this contract in sync
+    with ``ml/dataset.py`` and ``ml/train.py`` when changing features.
+    """
     return [[
         row_density(board),
         col_density(board),

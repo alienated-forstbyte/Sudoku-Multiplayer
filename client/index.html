@@ -1,32 +1,49 @@
-
 <!DOCTYPE html>
 <html>
 <head>
     <title>Sudoku Multiplayer</title>
     <link rel="stylesheet" href="/static/style.css">
-</head>
 
-<script src="/static/app.js"></script>
+    <!-- Matomo -->
+    <script>
+      var _paq = window._paq = window._paq || [];
+      _paq.push(['trackPageView']);
+      _paq.push(['enableLinkTracking']);
+      (function() {
+        var u="http://localhost:8081/";
+        _paq.push(['setTrackerUrl', u+'matomo.php']);
+        _paq.push(['setSiteId', '1']);
+        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+        g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+      })();
+    </script>
+    <!--Clarity-->
+    <script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "w22voaooze");
+</script>
+</head>
 
 <body>
 
 <h2>Sudoku Multiplayer</h2>
 
-<!-- Controls -->
 <button onclick="startGame()">Create Game</button>
 
 <input id="gameIdInput" placeholder="Enter Game ID">
 <button onclick="joinGame()">Join Game</button>
 
-<!-- Game Info -->
 <p id="status">Idle</p>
 <p id="difficulty"></p>
 <p id="timer"></p>
 <p id="scores"></p>
 
-<!-- Board -->
 <table id="board"></table>
+
+<script src="/static/app.js"></script>
 
 </body>
 </html>
-

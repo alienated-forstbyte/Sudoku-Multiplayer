@@ -35,6 +35,8 @@ Thumbs.db
 # ----------------------
 .vscode/
 .idea/
+*.swp
+*~
 
 # ----------------------
 # Jupyter
@@ -61,7 +63,10 @@ Thumbs.db
 # Test / coverage
 # ----------------------
 .coverage
+coverage.xml
 htmlcov/
+.pytest_cache/
+pytest-cache-files-*/
 
 # ----------------------
 # Build artifacts
@@ -78,7 +83,20 @@ temp/
 temp.*
 
 # ----------------------
+# Backups / editor scratch copies
+# ----------------------
+*.bak
+*.ak
+*.orig
+backup.sql
+
+# ----------------------
 # SQLite / DB
 # ----------------------
 *.db
 *.sqlite3
+
+# ----------------------
+# Third-party / vendored plugins (not part of this app)
+# ----------------------
+ClickHeat-Plugin/

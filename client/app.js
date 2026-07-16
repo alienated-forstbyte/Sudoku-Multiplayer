@@ -5,16 +5,9 @@ let timeLeft = 0;
 let timerInterval = null;
 
 async function startGame() {
-    console.log("Create Game clicked");
-
     try {
         const res = await fetch("/create", { method: "POST" });
-
-        console.log("Response:", res);
-
         const data = await res.json();
-
-        console.log("Data:", data);
 
         currentGameId = data.game_id;
 
@@ -24,7 +17,7 @@ async function startGame() {
         connect(currentGameId);
 
     } catch (err) {
-        console.error("ERROR:", err);
+        console.error(err);
         document.getElementById("status").innerText =
             "Error creating game";
     }
@@ -39,11 +32,10 @@ function connect(gameId) {
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        console.log("Received:", data);
 
         if (data.type === "waiting") {
             document.getElementById("status").innerText =
-                "Game ID: " + currentGameId + " | Waiting for second player...";
+                "Game ID: " + currentGameId + " | Waiting...";
         }
 
         if (data.type === "error") {
@@ -53,7 +45,10 @@ function connect(gameId) {
         if (data.type === "start") {
             timeLeft = data.time_left;
             startTimer();
-            document.getElementById("status").innerText = "Game Started!";
+
+            document.getElementById("status").innerText =
+                "Game ID: " + currentGameId + " | Started";
+
             document.getElementById("difficulty").innerText =
                 "Difficulty: " + data.difficulty;
 
@@ -62,7 +57,9 @@ function connect(gameId) {
 
         if (data.type === "update") {
             timeLeft = Math.min(timeLeft, data.time_left);
-            renderBoard(data.your_board);
+
+            // ✅ FIXED
+            renderBoard(data.board);
 
             document.getElementById("scores").innerText =
                 "Scores: " + JSON.stringify(data.scores);
@@ -70,7 +67,7 @@ function connect(gameId) {
 
         if (data.game_over) {
             alert("Winner: " + data.winner);
-         document.querySelectorAll("input").forEach(i => i.disabled = true);
+            document.querySelectorAll("input").forEach(i => i.disabled = true);
         }
     };
 
@@ -84,7 +81,11 @@ function joinGame() {
     const id = document.getElementById("gameIdInput").value;
 
     currentGameId = id;
-    connect(id);  // only here
+
+    document.getElementById("status").innerText =
+        "Game ID: " + currentGameId;
+
+    connect(id);
 }
 
 function startTimer() {
@@ -144,4 +145,3 @@ function renderBoard(board) {
         table.appendChild(row);
     }
 }
-

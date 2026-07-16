@@ -3,6 +3,12 @@ from engine.solver import is_valid
 
 
 def generate_full_board():
+    """Return a randomized, completely filled 9x9 Sudoku board.
+
+    ``fill`` performs depth-first search in row-major order. Shuffling the
+    candidate digits is what makes separate calls produce different boards.
+    When a branch cannot be completed, the cell is reset before backtracking.
+    """
     board = [[0 for _ in range(9)] for _ in range(9)]
 
     def fill():
@@ -27,6 +33,12 @@ def generate_full_board():
     return board
 
 def remove_numbers(board, difficulty="medium"):
+    """Copy a solved board and remove clues according to a difficulty range.
+
+    The input board is not changed. Difficulty here controls only the number
+    of empty cells; this function does not prove that the resulting puzzle has
+    a unique solution or measure the techniques needed to solve it.
+    """
     difficulty_map = {
         "easy": (25, 35),
         "medium": (35, 45),

@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   game-server:
     build: .
@@ -5,8 +7,60 @@ services:
       - "8000:8000"
     depends_on:
       - ml_service
+    networks:
+      - app_network
 
   ml_service:
     build: ./ml_service
     ports:
       - "8001:8001"
+    networks:
+      - app_network
+
+  blockchain:
+    build: ./blockchain
+    ports:
+      - "8002:8002"
+    networks:
+      - app_network
+
+  mariadb:
+    image: mariadb:10.6
+    container_name: matomo-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: matomo
+      MYSQL_USER: matomo
+      MYSQL_PASSWORD: matomo_password
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app_network
+
+  matomo:
+    image: matomo:latest
+    container_name: matomo
+    restart: always
+    depends_on:
+      - mariadb
+    ports:
+      - "8081:80"
+    environment:
+      MATOMO_DATABASE_HOST: mariadb
+      MATOMO_DATABASE_ADAPTER: mysql
+      MATOMO_DATABASE_TABLES_PREFIX: matomo_
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo_password
+      MATOMO_DATABASE_DBNAME: matomo
+    volumes:
+      - matomo_data:/var/www/html
+    networks:
+      - app_network
+
+volumes:
+  db_data:
+  matomo_data:
+
+networks:
+  app_network:

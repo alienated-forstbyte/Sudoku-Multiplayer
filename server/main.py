@@ -19,6 +19,12 @@ async def get_ui():
 
 @app.websocket("/ws/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
+    """Run one player's side of the room WebSocket protocol.
+
+    Clients send ``move`` messages. The server emits ``init``, ``waiting``,
+    ``start``, ``update``, ``game_over``, and ``error`` events documented in
+    ``docs/websocket-protocol.md``.
+    """
     await websocket.accept()
 
     # Join game
@@ -63,7 +69,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
     try:
         while True:
-            # Expiry check
+            # Expiry and timeout checks are message-driven: receive_text below
+            # waits indefinitely, so no background task closes an idle room.
             if manager.is_expired(game_id):
                 await websocket.send_text(json.dumps({
                     "type": "error",
@@ -111,7 +118,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     }))
                 continue
 
-            # Blockchain verification
+            # Integrity check against the immutable original puzzle hash.
             if not manager.verify_puzzle(game_id):
                 await websocket.send_text(json.dumps({
                     "type": "error",
@@ -137,6 +144,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                     msg = "Incorrect move"
 
                 else:
+                    # Both players mutate one server-authoritative board. The
+                    # sender earns the point and wins if this is the final cell.
                     board[row][col] = value
                     game["scores"][player_id] += 1
                     success = True

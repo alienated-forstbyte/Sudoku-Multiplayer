@@ -1,122 +1,212 @@
-A **real-time multiplayer Sudoku platform** featuring:
+# Multiplayer Sudoku MLOps Demo
 
-- 🎮 Competitive gameplay over WebSockets  
-- 🤖 ML-powered difficulty classification  
-- 🐳 Fully containerized deployment (Docker)  
-- ⚙️ Scalable backend architecture  
+A learning project that connects a browser-based multiplayer Sudoku game to a
+FastAPI WebSocket server, a scikit-learn inference service, a small hash-chain
+service, and a self-hosted Matomo analytics stack.
 
-This project demonstrates **end-to-end MLOps integration inside a distributed system**.
+The project is a prototype rather than a production-ready system. Its value is
+in showing how game logic, real-time communication, model serving, containers,
+and analytics fit together.
 
----
+## What the game does
 
-## 🧠 Key Highlights
+- Creates rooms with unique IDs.
+- Starts a game when two players have connected.
+- Gives both players the same shared Sudoku board.
+- Validates moves on the server against the generated solution.
+- Awards one point to the player who fills a cell correctly.
+- Ends when the board is complete or, after a client message triggers the
+  timeout check, when the 10-minute limit has elapsed.
+- Calls a separate ML API to label each generated puzzle.
+- Records puzzle data in an in-memory hash chain.
 
-- Built a **real-time multiplayer system** using FastAPI + WebSockets  
-- Designed an ML model (**96% accuracy**) for Sudoku difficulty prediction  
-- Engineered features based on **constraint density & candidate complexity**  
-- Integrated ML inference directly into backend game logic  
-- Containerized the system using Docker for reproducibility  
+Because the board is shared, a correct move immediately appears for both
+players. The player who submits the final correct value wins; on timeout, the
+highest score wins.
 
----
+## Architecture
 
-## 🎮 Features
+```text
+Browser
+  ├── HTTP POST /create ───────────────┐
+  └── WebSocket /ws/{game_id} ─────────┤
+                                       ▼
+                              FastAPI game server
+                                ├── Sudoku engine
+                                ├── in-memory rooms
+                                ├── HTTP ──► ML service
+                                └── HTTP ──► hash-chain service
 
-### 🔴 Real-Time Multiplayer
-- Simultaneous gameplay (no turn system)
-- Independent boards per player
-- Server-authoritative validation
-- Game rooms with unique IDs
-
----
-
-### 🧠 Sudoku Engine
-- Backtracking-based puzzle generator
-- Solver for correctness validation
-- Dynamic puzzle generation per player
-
----
-
-### 🤖 ML Difficulty Prediction
-- RandomForest model trained on engineered features
-- Features include:
-  - Constraint variance
-  - Candidate complexity
-  - Density metrics
-- Real-time difficulty prediction during gameplay
-
----
-
-### ⏱ Game Mechanics
-- 10-minute timer per game
-- Score-based competition
-- Instant win on completion
-- Timeout → highest score wins
-
----
-
-### 🐳 Dockerized Deployment
-- One-command startup using Docker Compose
-- Fully reproducible environment
-- Ready for scaling
-
----
-
-## 🏗️ System Architecture
-
-
-Client (WebSocket) 
-```
-↓
-FastAPI Server (Game Engine)
-↓
-ML Model (Difficulty Prediction)
-↓
-Game State Manager
+Browser analytics ──► Matomo ──► MariaDB
+                  └─► Microsoft Clarity
 ```
 
----
+See [docs/architecture.md](docs/architecture.md) for the request flow, state
+model, service boundaries, and design trade-offs. See
+[docs/websocket-protocol.md](docs/websocket-protocol.md) for the real-time
+message format. Track work in [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md).
 
-## ⚙️ How It Works
+## Project structure
 
-1. Player joins a game room  
-2. Server generates Sudoku puzzle  
-3. ML model predicts difficulty  
-4. Players solve independently in real-time  
-5. Scores update dynamically  
-6. Winner determined by completion or timer  
+```text
+.
+├── blockchain/       # In-memory hash-chain FastAPI service
+├── client/           # HTML, CSS, and browser WebSocket client
+├── engine/           # Sudoku generation, validation, and solving
+├── ml/               # Dataset generation, feature code, training, inference
+├── ml_service/       # Standalone model-serving FastAPI service
+├── server/           # Game API, WebSocket protocol, and room state
+├── tests/            # Sudoku engine tests
+├── Dockerfile        # Game-server image
+└── docker-compose.yaml
+```
 
----
+## Prerequisites
 
-## 🧪 Demo
+- Docker Engine with Docker Compose v2
+- Python 3.11+ if you want to train or test locally
+- `websocat` (optional) for inspecting WebSocket messages from a terminal
+
+## Quick start
+
+The `Makefile` wraps the whole workflow. From a clean clone:
 
 ```bash
-# Create game
+make all        # install deps, generate data, train, then compose up
+```
+
+Other useful targets (`make help` lists them all):
+
+```bash
+make train        # (re)train and place the model in both locations
+make test         # run the test suite in a local venv
+make up-detached  # build and start the stack in the background
+make logs         # follow application service logs
+make down         # stop the stack
+make clean        # stop, drop volumes, and remove generated artifacts
+```
+
+If `make` is unavailable, `./run.sh` provides the same steps
+(`./run.sh all|install|train|test|up|down|clean`).
+
+## Prepare the ML artifact manually
+
+The targets above handle this for you. To do it by hand instead: model and
+dataset files are intentionally ignored by Git, so a fresh clone does not
+contain `sudoku_model.pkl`.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+
+python -m ml.dataset
+python -m ml.train
+cp sudoku_model.pkl ml_service/sudoku_model.pkl
+```
+
+The root model is currently imported by the game-server image, while the copied
+model is loaded by the ML service.
+
+> **Known ML contract issue:** `ml_service/app.py` currently builds a different
+> ordered feature vector from `ml/train.py`. The service starts with the model
+> artifact, but its predictions should not be treated as reliable until the
+> training and serving feature contracts are unified.
+
+## Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- Game UI and API: http://localhost:8000
+- ML difficulty service: http://localhost:8001
+- Puzzle hash-chain service: http://localhost:8002
+- Matomo analytics UI: http://localhost:8081
+
+Open http://localhost:8000, create a room, copy its ID into a second browser
+window, and join from that window.
+
+The Compose database credentials are development defaults. Change them before
+using the stack outside a local learning environment.
+
+## Inspect the APIs
+
+Create a room:
+
+```bash
 curl -X POST http://localhost:8000/create
+```
 
-# Connect player
+Connect to it:
+
+```bash
 websocat ws://localhost:8000/ws/<game_id>
-
 ```
-## 🧱 Project Structure
+
+Send a move:
+
+```json
+{"type":"move","row":0,"col":1,"value":7}
 ```
-sudoku/
-│
-├── engine/        # Sudoku generator & solver
-├── server/        # FastAPI + game manager
-├── ml/            # Dataset, features, training, inference
-├── tests/         # Unit tests
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
+
+FastAPI also exposes interactive API documentation at:
+
+- http://localhost:8000/docs
+- http://localhost:8001/docs
+- http://localhost:8002/docs
+
+## Run tests
+
+From the repository root:
+
+```bash
+python -m pip install pytest
+python -m pytest -q
+python -m compileall engine server ml ml_service blockchain
+docker compose config --quiet
 ```
-## ⚙️ Tech Stack
 
-Backend: FastAPI, WebSockets
+The existing tests cover board generation and solver behavior. Integration
+tests for WebSocket events, service failures, hash verification, and the ML
+feature contract are still needed.
 
-ML: Scikit-learn (RandomForest)
+## Important prototype limitations
 
-Data: Custom feature engineering pipeline
+- Rooms, players, scores, the hash chain, and timers live only in process
+  memory. Restarting a service loses its state, and multiple game-server
+  workers would not share rooms.
+- Puzzle difficulty starts as a clue-removal range; the generator does not
+  prove that a puzzle has exactly one solution.
+- Timeout handling is message-driven, not scheduled in the background.
+- Service URLs are hardcoded Docker DNS names, so running only the game server
+  directly on the host requires code or hostname configuration changes.
+- Network/service errors are not yet handled gracefully by room creation.
+- Analytics scripts send browser usage data; review consent, retention, and
+  privacy requirements before deployment.
 
-Deployment: Docker, Docker Compose
+These are useful next improvements because they cross the boundaries between
+application logic, distributed state, model reproducibility, and operations.
 
-Language: Python
+## Learning path
+
+1. Start with `engine/generator.py` and `engine/solver.py` to understand
+   backtracking.
+2. Read `server/game_manager.py` to see how room state is represented.
+3. Follow `server/main.py` and
+   [docs/websocket-protocol.md](docs/websocket-protocol.md) for multiplayer
+   events.
+4. Compare `ml/dataset.py`, `ml/train.py`, and `ml_service/app.py` to learn why
+   training-serving feature parity matters.
+5. Inspect `docker-compose.yaml` to see how service names become internal DNS
+   names on a Compose network.
+
+## Technology
+
+- Python, FastAPI, Uvicorn, WebSockets
+- scikit-learn Random Forest, pandas, joblib
+- HTML, CSS, and vanilla JavaScript
+- Docker and Docker Compose
+- Matomo, MariaDB, and Microsoft Clarity
