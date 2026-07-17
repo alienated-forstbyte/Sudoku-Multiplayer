@@ -16,7 +16,8 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Environment-based configuration | Complete (Step 3) |
 | Async service HTTP calls | Complete (Step 4) |
 | Typed room state | Complete (Step 5) |
-| Redis shared room state | Next (Step 6) |
+| Redis shared room state | Complete (Step 6) |
+| Independent timeout scheduler | Next (Step 7) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -95,14 +96,27 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 
 ### Step 5 — Typed room state
 
-- Added `server/models.py` with `RoomState`, board aliases, a connection
-  protocol, and immutable original-board copies.
+- Added `server/models.py` with `RoomState`, board aliases, connected player
+  IDs, and immutable original-board copies.
 - Moved room expiry, player joining/start, time remaining, timeout winner,
   move scoring, and completion logic onto the model.
 - Replaced all game-server string-key state access with typed attributes.
 - Fixed the obsolete `check_win_player` implementation that referenced a
   nonexistent `boards` key.
 - Added focused invariant, timer, scoring, winner, and immutability tests.
+
+### Step 6 — Redis room state and pub/sub
+
+- Split serializable room snapshots from each worker's local WebSocket map.
+- Added `InMemoryRoomRepository` / `RedisRoomRepository`; mutations use an
+  async lock or distributed per-room Redis lock.
+- Added in-memory and Redis event buses; every worker forwards published room
+  events to its own sockets.
+- Added Redis AOF persistence, configurable room TTL, and graceful player-slot
+  release.
+- Added serialization, concurrency, restart, and multi-manager tests.
+- Live verification passed for 20 concurrent atomic mutations, two Redis
+  subscribers, server restart recovery, and two players on separate workers.
 
 ### Playtest notes (not fixed yet)
 
@@ -115,21 +129,21 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 6._
+_Nothing actively in progress. Next work is Step 7._
 
 ## Next
 
-**Step 6 — Redis-backed room state and pub/sub**
+**Step 7 — Independent room expiry and match timeout scheduler**
 
 See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
 
 Short checklist:
 
-- [ ] Separate serializable room data from local WebSocket connections
-- [ ] Add Redis repository plus in-memory test implementation
-- [ ] Use TTLs and atomic/optimistic move updates
-- [ ] Publish room events and forward them to local sockets
-- [ ] Add Redis Compose service and restart/multi-worker tests
+- [ ] Store room deadlines in Redis (and an in-memory test queue)
+- [ ] Add a lifespan-managed scheduler that atomically claims due work
+- [ ] Expire waiting rooms without incoming messages
+- [ ] Broadcast exactly one `game_over` event at match deadline
+- [ ] Test duplicate workers and restart recovery
 
 ## Deferred
 

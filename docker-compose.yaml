@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   game-server:
     build: .
@@ -12,9 +10,15 @@ services:
       SERVICE_READ_TIMEOUT: ${SERVICE_READ_TIMEOUT:-5}
       ROOM_EXPIRY_SECONDS: ${ROOM_EXPIRY_SECONDS:-25}
       GAME_TIME_LIMIT_SECONDS: ${GAME_TIME_LIMIT_SECONDS:-600}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_ROOM_TTL_SECONDS: ${REDIS_ROOM_TTL_SECONDS:-3600}
     depends_on:
-      - ml_service
-      - blockchain
+      ml_service:
+        condition: service_started
+      blockchain:
+        condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - app_network
 
@@ -31,6 +35,19 @@ services:
     build: ./blockchain
     ports:
       - "8002:8002"
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+    volumes:
+      - redis_data:/data
     networks:
       - app_network
 
@@ -71,6 +88,7 @@ services:
 volumes:
   db_data:
   matomo_data:
+  redis_data:
 
 networks:
   app_network:

@@ -2,17 +2,12 @@
 
 import time
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 
 Board: TypeAlias = list[list[int]]
 FrozenBoard: TypeAlias = tuple[tuple[int, ...], ...]
 Winner: TypeAlias = int | Literal["draw"] | None
-
-
-class PlayerConnection(Protocol):
-    async def send_text(self, data: str) -> None:
-        """Send one text frame to this player."""
 
 
 def freeze_board(board: Board) -> FrozenBoard:
@@ -37,7 +32,7 @@ class RoomState:
     difficulty: str
     puzzle_hash: str
     time_limit_seconds: int
-    players: list[PlayerConnection] = field(default_factory=list)
+    connected_player_ids: list[int] = field(default_factory=list)
     scores: dict[int, int] = field(
         default_factory=lambda: {0: 0, 1: 0}
     )
@@ -63,26 +58,31 @@ class RoomState:
 
     def add_player(
         self,
-        connection: PlayerConnection,
         now: float | None = None,
     ) -> int | None:
-        """Add a connection and start the room when player 2 arrives."""
-        if len(self.players) >= 2:
+        """Reserve a free player ID and start when both IDs are connected."""
+        available = (
+            player_id
+            for player_id in (0, 1)
+            if player_id not in self.connected_player_ids
+        )
+        player_id = next(available, None)
+        if player_id is None:
             return None
 
-        self.players.append(connection)
-        player_id = len(self.players) - 1
+        self.connected_player_ids.append(player_id)
+        self.connected_player_ids.sort()
         self.scores[player_id] = 0
 
-        if len(self.players) == 2:
+        if len(self.connected_player_ids) == 2 and not self.started:
             self.started = True
             self.start_time = time.time() if now is None else now
 
         return player_id
 
-    def remove_player(self, connection: PlayerConnection) -> None:
-        if connection in self.players:
-            self.players.remove(connection)
+    def remove_player(self, player_id: int) -> None:
+        if player_id in self.connected_player_ids:
+            self.connected_player_ids.remove(player_id)
 
     def time_left(self, now: float | None = None) -> int:
         if self.start_time is None:
@@ -130,3 +130,45 @@ class RoomState:
             self.winner = player_id
 
         return True, "Correct move"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe snapshot for a shared state repository."""
+        return {
+            "created_at": self.created_at,
+            "expiry_seconds": self.expiry_seconds,
+            "board": self.board,
+            "original_board": [list(row) for row in self.original_board],
+            "solution": self.solution,
+            "difficulty": self.difficulty,
+            "puzzle_hash": self.puzzle_hash,
+            "time_limit_seconds": self.time_limit_seconds,
+            "connected_player_ids": self.connected_player_ids,
+            "scores": self.scores,
+            "start_time": self.start_time,
+            "started": self.started,
+            "winner": self.winner,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RoomState":
+        """Restore a snapshot, normalizing JSON string score keys."""
+        return cls(
+            created_at=data["created_at"],
+            expiry_seconds=data["expiry_seconds"],
+            board=data["board"],
+            original_board=freeze_board(data["original_board"]),
+            solution=data["solution"],
+            difficulty=data["difficulty"],
+            puzzle_hash=data["puzzle_hash"],
+            time_limit_seconds=data["time_limit_seconds"],
+            connected_player_ids=list(data.get("connected_player_ids", [])),
+            scores={
+                int(player_id): score
+                for player_id, score in data.get(
+                    "scores", {0: 0, 1: 0}
+                ).items()
+            },
+            start_time=data.get("start_time"),
+            started=data.get("started", False),
+            winner=data.get("winner"),
+        )

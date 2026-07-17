@@ -3,11 +3,6 @@ import pytest
 from server.models import RoomState, freeze_board
 
 
-class DummyConnection:
-    async def send_text(self, _data):
-        pass
-
-
 def make_room(**overrides):
     solution = [[1 for _ in range(9)] for _ in range(9)]
     board = [row[:] for row in solution]
@@ -43,16 +38,14 @@ def test_original_board_is_an_immutable_copy():
 
 def test_second_player_starts_room_and_timer():
     room = make_room()
-    player_0 = DummyConnection()
-    player_1 = DummyConnection()
 
-    assert room.add_player(player_0, now=150.0) == 0
+    assert room.add_player(now=150.0) == 0
     assert room.started is False
-    assert room.add_player(player_1, now=155.0) == 1
+    assert room.add_player(now=155.0) == 1
 
     assert room.started is True
     assert room.start_time == 155.0
-    assert room.add_player(DummyConnection()) is None
+    assert room.add_player() is None
     assert room.time_left(now=165.0) == 50
     assert room.is_timed_out(now=215.0) is True
 
@@ -63,8 +56,8 @@ def test_unstarted_room_expiry_stops_after_start():
     assert room.is_expired(now=125.0) is False
     assert room.is_expired(now=126.0) is True
 
-    room.add_player(DummyConnection())
-    room.add_player(DummyConnection(), now=130.0)
+    room.add_player()
+    room.add_player(now=130.0)
     assert room.is_expired(now=1_000.0) is False
 
 

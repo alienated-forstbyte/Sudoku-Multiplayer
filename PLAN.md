@@ -12,41 +12,43 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 6 — Move room state to Redis and broadcasts to pub/sub**
+**Step 7 — Run room expiry and match timeouts independently of messages**
 
 ### Why this is next
 
-Typed rooms are still process-local, so restarts lose every game and multiple
-workers cannot coordinate players or board updates. Redis can provide shared
-state and a broadcast channel while WebSocket objects remain local to workers.
+Timers are still checked only when a player sends a message. An idle expired
+room remains stored, and a finished match does not emit `game_over` until
+someone interacts. Redis now provides the shared coordination needed for an
+independent scheduler.
 
 ### Goals
 
-1. Persist serializable room state outside the Python process.
-2. Coordinate updates across multiple game-server workers through pub/sub.
-3. Keep live WebSocket connections local and map them to room subscriptions.
-4. Define expiry/cleanup behavior using Redis TTLs.
+1. Expire waiting rooms at their deadline without client activity.
+2. Finish matches and publish `game_over` exactly once at the time limit.
+3. Coordinate multiple workers so only one processes each deadline.
+4. Recover pending deadlines after a worker restart.
 
 ### Approach
 
-1. Separate serializable game data from process-local player connections.
-2. Add an async Redis repository interface and an in-memory test implementation.
-3. Store room snapshots with TTL and use optimistic/atomic move updates.
-4. Publish protocol events per room; each worker forwards them to local sockets.
-5. Add Redis to Compose and test restart/multi-worker behavior.
+1. Store room deadlines in a Redis sorted set (with an in-memory test queue).
+2. Run a lifespan-managed scheduler that claims due items atomically.
+3. Re-check room state under the repository mutation lock before expiring or
+   finishing it.
+4. Publish one timeout event through the existing room event bus.
+5. Test idle timeout, cancellation/state changes, duplicate workers, and
+   restart recovery.
 
-### Out of scope for Step 6
+### Out of scope for Step 7
 
 - Stopping the client timer / lobby rematch (Deferred)
-- Scheduled timeout tasks (Step 7)
-- Long-term match history storage
+- Durable match history after cleanup
+- General-purpose background job infrastructure
 
 ### Success criteria
 
-- A room survives a game-server restart while Redis remains available.
-- Two workers can serve different players in the same room.
-- Concurrent moves do not overwrite each other.
-- Existing protocol response shapes remain unchanged.
+- Waiting rooms disappear at their configured expiry without messages.
+- Started games broadcast `game_over` at their deadline while idle.
+- Multiple workers cannot publish duplicate terminal events.
 
 ---
 
@@ -60,8 +62,8 @@ state and a broadcast channel while WebSocket objects remain local to workers.
 | 3 | Move service URLs, timeouts, credentials to env vars | Done |
 | 4 | Async HTTP client with connect/read timeouts | Done |
 | 5 | Typed room state models instead of nested dicts | Done |
-| 6 | Redis-backed rooms + pub/sub for multi-worker | **Next** |
-| 7 | Background timeout tasks (not message-driven only) | Planned |
+| 6 | Redis-backed rooms + pub/sub for multi-worker | Done |
+| 7 | Background timeout tasks (not message-driven only) | **Next** |
 | 8 | Health checks, structured logs, metrics, degradation | Planned |
 | 9 | Puzzle uniqueness check in the generator | Planned |
 | 10 | Persist the hash chain beyond process memory | Planned |
@@ -129,3 +131,12 @@ Details also live under **Deferred gameplay feedback** in
   completion invariants onto the model.
 - Replaced all server-side string-key room access with attributes.
 - Removed the broken shared-board `boards` lookup and added focused model tests.
+
+## Completed Step 6 summary
+
+- Split serializable `RoomState` snapshots from worker-local WebSocket objects.
+- Added in-memory and Redis repositories with atomic mutation boundaries.
+- Added in-memory and Redis event buses for worker-local socket delivery.
+- Added Redis AOF, room TTL configuration, and graceful slot release.
+- Verified atomic concurrent mutations, two Redis subscribers, restart
+  persistence, and two players connected through separate server workers.

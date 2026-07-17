@@ -1,10 +1,13 @@
+import asyncio
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
+from server.events import InMemoryEventBus
 from server.main import app, manager
 from server.models import RoomState, freeze_board
+from server.repository import InMemoryRoomRepository
 
 
 GAME_ID = "test-game"
@@ -16,7 +19,7 @@ def seed_game():
     board = [row[:] for row in solution]
     board[0][0] = 0
 
-    manager.games[GAME_ID] = RoomState(
+    room = RoomState(
         created_at=time.time(),
         expiry_seconds=25,
         board=board,
@@ -26,6 +29,7 @@ def seed_game():
         puzzle_hash="test-hash",
         time_limit_seconds=600,
     )
+    asyncio.run(manager.repository.create(GAME_ID, room))
 
 
 @pytest.fixture(autouse=True)
@@ -33,10 +37,13 @@ def isolated_manager(monkeypatch):
     async def verify_puzzle(_game_id):
         return True
 
-    manager.games.clear()
+    manager.repository = InMemoryRoomRepository()
+    manager.event_bus = InMemoryEventBus()
+    manager.local_connections.clear()
     monkeypatch.setattr(manager, "verify_puzzle", verify_puzzle)
     yield
-    manager.games.clear()
+    asyncio.run(manager.repository.clear())
+    manager.local_connections.clear()
 
 
 def test_first_player_receives_init_and_waiting():
@@ -80,7 +87,8 @@ def test_move_is_rejected_before_second_player_joins(monkeypatch):
                 "type": "error",
                 "message": "Game has not started",
             }
-            assert manager.games[GAME_ID].board[0][0] == 0
+            room = asyncio.run(manager.get_game(GAME_ID))
+            assert room.board[0][0] == 0
 
 
 def test_started_room_handles_protocol_errors_and_broadcasts_moves():
@@ -125,7 +133,8 @@ def test_started_room_handles_protocol_errors_and_broadcasts_moves():
                     "type": "error",
                     "message": "row must be between 0 and 8",
                 }
-                assert manager.games[GAME_ID].board[0][0] == 0
+                room = asyncio.run(manager.get_game(GAME_ID))
+                assert room.board[0][0] == 0
 
                 player_0.send_json({
                     "type": "move",

@@ -14,6 +14,11 @@ def _get_str(name: str, default: str) -> str:
     return value if value not in (None, "") else default
 
 
+def _get_optional_str(name: str) -> str | None:
+    value = os.environ.get(name)
+    return value if value not in (None, "") else None
+
+
 def _get_float(name: str, default: float) -> float:
     raw = os.environ.get(name)
     if raw in (None, ""):
@@ -44,6 +49,8 @@ class Settings:
     service_read_timeout: float = 5.0
     room_expiry_seconds: int = 25
     game_time_limit_seconds: int = 600
+    redis_url: str | None = None
+    redis_room_ttl_seconds: int = 3600
 
     @property
     def predict_url(self) -> str:
@@ -76,5 +83,9 @@ def load_settings() -> Settings:
         ),
         game_time_limit_seconds=_get_int(
             "GAME_TIME_LIMIT_SECONDS", Settings.game_time_limit_seconds
+        ),
+        redis_url=_get_optional_str("REDIS_URL"),
+        redis_room_ttl_seconds=_get_int(
+            "REDIS_ROOM_TTL_SECONDS", Settings.redis_room_ttl_seconds
         ),
     )

@@ -24,22 +24,25 @@ authoritative. Each server update can reduce the displayed time.
 ### Game server
 
 `server/main.py` owns the HTTP and WebSocket endpoints.
-`server/game_manager.py` owns a typed `dict[str, RoomState]` and talks to the
-ML and hash-chain services. `server/models.py` defines room fields and owns
-player joining, expiry/timer calculations, scoring, completion, and
-timeout-winner invariants.
+`server/game_manager.py` coordinates a room repository, an event bus, local
+WebSocket connections, and the ML/hash-chain services. `server/models.py`
+defines serializable room fields and owns joining, expiry/timer calculations,
+scoring, completion, and timeout-winner invariants.
 
 A room contains:
 
 - creation and expiration timestamps;
-- up to two WebSocket connections;
+- up to two connected player IDs (WebSocket objects stay worker-local);
 - one shared live puzzle board, an immutable `original_board`, and its solution;
 - the predicted difficulty and puzzle hash (of `original_board`);
 - scores for player IDs `0` and `1`;
 - game start time, time limit, and winner.
 
-There is no database or message broker for game state. This makes the code easy
-to study, but all connections for a room must reach the same Python process.
+`server/repository.py` stores room snapshots in Redis with a TTL and uses a
+per-room distributed lock for atomic read-modify-write operations.
+`server/events.py` publishes room events through Redis pub/sub; every worker
+subscribes and forwards those events only to its own local WebSockets. Tests use
+equivalent in-memory repository/event-bus implementations.
 
 Move payloads are validated by the pure helper in `server/protocol.py` before
 the server indexes the board. The WebSocket integration tests seed room state
@@ -134,10 +137,11 @@ Room creation and move verification await that client, so slow dependencies do
 not block unrelated WebSocket work. `SERVICE_CONNECT_TIMEOUT` and
 `SERVICE_READ_TIMEOUT` bound connection establishment and response waiting.
 
-`RoomState` removes string-key ambiguity but remains mutable and has no locking
-or transactional boundary. This is acceptable for understanding the
-prototype, but concurrent moves to the same cell can race as the architecture
-evolves.
+`RoomState` removes string-key ambiguity. Repository mutations provide the
+transaction boundary: the in-memory backend uses an async lock and Redis uses
+a distributed per-room lock. This prevents concurrent workers from overwriting
+each other's moves. Redis AOF persists snapshots across game-server restarts;
+live sockets reconnect separately because they cannot be serialized.
 
 ## Roadmap pointer
 
@@ -152,8 +156,8 @@ Summary of the active order:
 3. Env-based service URLs / credentials (**done**)
 4. Async HTTP client with timeouts (**done**)
 5. Typed room state models (**done**)
-6. Redis rooms + pub/sub (**next**)
-7. Background timeout tasks
+6. Redis rooms + pub/sub (**done**)
+7. Background timeout tasks (**next**)
 8. Health checks, logs, metrics, degradation
 9. Puzzle uniqueness in generation
 10. Persist the hash chain

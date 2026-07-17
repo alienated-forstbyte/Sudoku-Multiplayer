@@ -62,7 +62,7 @@ def test_game_manager_uses_async_client_for_service_calls(monkeypatch):
             manager = GameManager(settings=settings, http_client=client)
             game_id = await manager.create_game()
             assert await manager.verify_puzzle(game_id) is True
-            return manager.get_game(game_id)
+            return await manager.get_game(game_id)
 
     game = asyncio.run(scenario())
 
@@ -95,7 +95,7 @@ def test_slow_service_call_yields_to_other_coroutines():
                 http_client=client,
             )
             board = [[0 for _ in range(9)] for _ in range(9)]
-            manager.games["game"] = RoomState(
+            room = RoomState(
                 created_at=0,
                 expiry_seconds=25,
                 board=[row[:] for row in board],
@@ -105,6 +105,7 @@ def test_slow_service_call_yields_to_other_coroutines():
                 puzzle_hash="hash",
                 time_limit_seconds=600,
             )
+            await manager.repository.create("game", room)
 
             async def heartbeat():
                 await asyncio.sleep(0.01)

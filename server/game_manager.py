@@ -5,27 +5,65 @@ import json
 import httpx
 from engine.generator import generate_full_board, remove_numbers
 from server.config import Settings, load_settings
+from server.events import InMemoryEventBus
 from server.models import RoomState, freeze_board
+from server.repository import InMemoryRoomRepository
 
 
 class GameManager:
-    """Own process-local rooms and coordinate the supporting services.
+    """Coordinate shared rooms, local sockets, and supporting services.
 
-    Room state is typed but remains process-local. It is lost on restart and
-    cannot be shared by multiple server workers.
+    The repository owns serializable state; the event bus carries protocol
+    events between workers. Only live WebSocket objects remain process-local.
     """
 
     def __init__(
         self,
         settings: Settings | None = None,
         http_client: httpx.AsyncClient | None = None,
+        repository=None,
+        event_bus=None,
     ):
         self.settings = settings or load_settings()
         self.http_client = http_client
-        self.games: dict[str, RoomState] = {}
+        self.repository = repository or InMemoryRoomRepository()
+        self.event_bus = event_bus or InMemoryEventBus()
+        self.local_connections: dict[str, dict[int, object]] = {}
 
-    def is_expired(self, game_id):
-        game = self.games.get(game_id)
+    async def start(self) -> None:
+        await self.event_bus.start(self._deliver_local)
+
+    async def stop(self) -> None:
+        for game_id, connections in list(self.local_connections.items()):
+            player_ids = tuple(connections)
+
+            def release_local_players(room, ids=player_ids):
+                for player_id in ids:
+                    room.remove_player(player_id)
+
+            await self.repository.mutate(game_id, release_local_players)
+        await self.event_bus.stop()
+        self.local_connections.clear()
+
+    async def _deliver_local(self, game_id: str, payload: dict) -> None:
+        """Forward one shared event to sockets connected to this worker."""
+        connections = self.local_connections.get(game_id, {})
+        stale_ids = []
+        message = json.dumps(payload)
+        for player_id, connection in list(connections.items()):
+            try:
+                await connection.send_text(message)
+            except Exception:
+                stale_ids.append(player_id)
+
+        for player_id in stale_ids:
+            connections.pop(player_id, None)
+
+    async def broadcast(self, game_id: str, payload: dict) -> None:
+        await self.event_bus.publish(game_id, payload)
+
+    async def is_expired(self, game_id):
+        game = await self.repository.get(game_id)
         if not game:
             return True
 
@@ -68,7 +106,7 @@ class GameManager:
 
         game_id = str(uuid.uuid4())
 
-        self.games[game_id] = RoomState(
+        room = RoomState(
             created_at=time.time(),
             expiry_seconds=self.settings.room_expiry_seconds,
             board=puzzle,
@@ -78,29 +116,55 @@ class GameManager:
             puzzle_hash=puzzle_hash,
             time_limit_seconds=self.settings.game_time_limit_seconds,
         )
+        await self.repository.create(game_id, room)
 
         return game_id
 
-    def join_game(self, game_id, websocket):
-        """Add one connection and return its player ID, or ``None``.
+    async def join_game(self, game_id, websocket):
+        """Reserve a shared player ID and register its socket on this worker.
 
-        Player IDs currently match indexes in ``players``. Removing a
-        disconnected socket can therefore make reconnect behavior ambiguous;
-        persistent player records would be safer in a production protocol.
+        Returns ``(player_id, room, started_now)``. The repository mutation is
+        atomic, so two workers cannot reserve the same final slot.
         """
-        if game_id not in self.games:
-            return None
+        game = await self.repository.get(game_id)
+        if game is None:
+            return None, None, False
+        if game.is_expired():
+            await self.repository.delete(game_id)
+            return None, None, False
 
-        if self.is_expired(game_id):
-            del self.games[game_id]
-            return None
+        def reserve_player(room):
+            was_started = room.started
+            player_id = room.add_player()
+            return player_id, not was_started and room.started
 
-        game = self.games[game_id]
+        game, result = await self.repository.mutate(
+            game_id,
+            reserve_player,
+        )
+        if game is None or result is None:
+            return None, None, False
 
-        return game.add_player(websocket)
+        player_id, started_now = result
+        if player_id is None:
+            return None, game, False
 
-    def get_game(self, game_id):
-        return self.games.get(game_id)
+        self.local_connections.setdefault(game_id, {})[player_id] = websocket
+        return player_id, game, started_now
+
+    async def disconnect(self, game_id: str, player_id: int) -> None:
+        connections = self.local_connections.get(game_id)
+        if connections:
+            connections.pop(player_id, None)
+            if not connections:
+                self.local_connections.pop(game_id, None)
+        await self.repository.mutate(
+            game_id,
+            lambda room: room.remove_player(player_id),
+        )
+
+    async def get_game(self, game_id):
+        return await self.repository.get(game_id)
     
     async def verify_puzzle(self, game_id):
         """Ask the hash-chain service whether the original puzzle is authentic.
@@ -108,7 +172,9 @@ class GameManager:
         Verification always uses ``original_board``, never the live shared
         board, so accepted moves do not invalidate integrity checks.
         """
-        game = self.games[game_id]
+        game = await self.repository.get(game_id)
+        if game is None:
+            return False
 
         response = await self._require_http_client().post(
             self.settings.blockchain_verify_url,
@@ -121,23 +187,33 @@ class GameManager:
 
         return response.json()["valid"]
     
-    def apply_move(self, game_id, player_id, row, col, value):
-        game = self.games.get(game_id)
-        if not game:
-            return False, "Game not found"
+    async def apply_move(self, game_id, player_id, row, col, value):
+        game, result = await self.repository.mutate(
+            game_id,
+            lambda room: room.apply_move(player_id, row, col, value),
+        )
+        if game is None:
+            return None, False, "Game not found"
+        success, message = result
+        return game, success, message
 
-        return game.apply_move(player_id, row, col, value)
-    
-    def get_time_left(self, game_id):
-        game = self.games.get(game_id)
+    async def get_time_left(self, game_id):
+        game = await self.repository.get(game_id)
         if not game:
             return 0
 
         return game.time_left()
-    
-    def check_timeout(self, game_id):
-        return self.get_time_left(game_id) <= 0
-    
-    def check_win_player(self, game_id, _player_id):
+
+    async def check_timeout(self, game_id):
+        return await self.get_time_left(game_id) <= 0
+
+    async def finish_on_timeout(self, game_id):
+        return await self.repository.mutate(
+            game_id,
+            lambda room: room.finish_on_timeout(),
+        )
+
+    async def check_win_player(self, game_id, _player_id):
         """Return completion for the room's shared board."""
-        return self.games[game_id].is_complete()
+        room = await self.repository.get(game_id)
+        return room.is_complete() if room else False
