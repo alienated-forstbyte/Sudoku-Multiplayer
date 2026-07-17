@@ -105,13 +105,11 @@ python -m ml.train
 cp sudoku_model.pkl ml_service/sudoku_model.pkl
 ```
 
-The root model is currently imported by the game-server image, while the copied
-model is loaded by the ML service.
-
-> **Known ML contract issue:** `ml_service/app.py` currently builds a different
-> ordered feature vector from `ml/train.py`. The service starts with the model
-> artifact, but its predictions should not be treated as reliable until the
-> training and serving feature contracts are unified.
+The root model supports local prediction; the copied model is loaded by the ML
+service. Both are versioned bundles containing the estimator, ordered feature
+names, contract version, and training scikit-learn version. Training and
+serving share `ml/feature_contract.py`, and service startup rejects an
+incompatible artifact.
 
 ## Run with Docker Compose
 
@@ -129,8 +127,30 @@ Services:
 Open http://localhost:8000, create a room, copy its ID into a second browser
 window, and join from that window.
 
-The Compose database credentials are development defaults. Change them before
-using the stack outside a local learning environment.
+## Configuration
+
+All runtime settings have development defaults, so the stack runs with no
+configuration. To override them, copy the example file and edit values; Docker
+Compose loads `.env` automatically:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ML_SERVICE_URL` | `http://ml_service:8001` | Difficulty service base URL |
+| `BLOCKCHAIN_SERVICE_URL` | `http://blockchain:8002` | Hash-chain service base URL |
+| `SERVICE_HTTP_TIMEOUT` | `5` | Seconds to wait for those HTTP calls |
+| `ROOM_EXPIRY_SECONDS` | `25` | Waiting-room lifetime before a second player |
+| `GAME_TIME_LIMIT_SECONDS` | `600` | Match duration before timeout scoring |
+| `MATOMO_DB_ROOT_PASSWORD` | `rootpassword` | MariaDB root password |
+| `MATOMO_DB_NAME` | `matomo` | Matomo database name |
+| `MATOMO_DB_USER` | `matomo` | Matomo database user |
+| `MATOMO_DB_PASSWORD` | `matomo_password` | Matomo database password |
+
+The database credentials are development defaults. Change them in `.env` before
+exposing the stack beyond local development.
 
 ## Inspect the APIs
 
@@ -169,9 +189,8 @@ python -m compileall engine server ml ml_service blockchain
 docker compose config --quiet
 ```
 
-The existing tests cover board generation and solver behavior. Integration
-tests for WebSocket events, service failures, hash verification, and the ML
-feature contract are still needed.
+The tests cover board generation/solving, hash verification, WebSocket
+validation and broadcasts, and ML training-serving feature parity.
 
 ## Important prototype limitations
 
@@ -181,8 +200,9 @@ feature contract are still needed.
 - Puzzle difficulty starts as a clue-removal range; the generator does not
   prove that a puzzle has exactly one solution.
 - Timeout handling is message-driven, not scheduled in the background.
-- Service URLs are hardcoded Docker DNS names, so running only the game server
-  directly on the host requires code or hostname configuration changes.
+- Service URLs, timeouts, and game timing come from environment variables that
+  default to Docker DNS names; running only the game server directly on the
+  host still requires setting `ML_SERVICE_URL` and `BLOCKCHAIN_SERVICE_URL`.
 - Network/service errors are not yet handled gracefully by room creation.
 - Analytics scripts send browser usage data; review consent, retention, and
   privacy requirements before deployment.

@@ -6,6 +6,9 @@ VENV   ?= .venv
 PIP    := $(VENV)/bin/pip
 PY     := $(VENV)/bin/python
 MODEL  := sudoku_model.pkl
+INSTALL_STAMP := $(VENV)/.requirements-installed
+TRAINING_SOURCES := ml/dataset.py ml/features.py ml/feature_contract.py \
+	ml/model_bundle.py ml/train.py requirements.txt
 
 .DEFAULT_GOAL := help
 
@@ -15,13 +18,16 @@ help: ## Show available targets
 		| sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-$(VENV): ## Create the local virtual environment
+$(VENV):
 	$(PYTHON) -m venv $(VENV)
 
-.PHONY: install
-install: $(VENV) ## Install Python dependencies into the venv
+$(INSTALL_STAMP): requirements.txt | $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	touch $(INSTALL_STAMP)
+
+.PHONY: install
+install: $(INSTALL_STAMP) ## Install Python dependencies into the venv
 
 .PHONY: dataset
 dataset: install ## Generate the synthetic training dataset
@@ -33,7 +39,7 @@ train: dataset ## Train the model and place it where both images expect it
 	cp $(MODEL) ml_service/$(MODEL)
 	@echo "Model written to ./$(MODEL) and ml_service/$(MODEL)"
 
-$(MODEL): ## Train only if the model artifact is missing
+$(MODEL): $(TRAINING_SOURCES) ## Train if the model is missing or contract changed
 	$(MAKE) train
 
 .PHONY: test

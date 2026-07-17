@@ -68,9 +68,11 @@ The training pipeline is split across:
 3. `ml_service/app.py`, which loads a serialized model and serves `POST
    /predict`.
 
-Feature order is part of a model's API, even though it is not represented by an
-HTTP route. The current serving order differs from training, so unifying the
-feature extractor is a prerequisite for trustworthy predictions (Step 2).
+Feature order is part of the model API. `ml/feature_contract.py` defines one
+versioned tuple of names and one extractor shared by dataset generation, local
+prediction, and the HTTP service. Training saves that metadata beside the
+estimator in a model bundle; serving validates it at startup and uses a named
+DataFrame, preventing silent column-order drift.
 
 ### Hash-chain service
 
@@ -109,16 +111,26 @@ consent handling where applicable, and non-default credentials.
 
 Room expiration and game timeout differ:
 
-- An unstarted room expires 25 seconds after creation.
-- A started room has a 600-second game limit.
+- An unstarted room expires after `ROOM_EXPIRY_SECONDS` (default 25).
+- A started room has a `GAME_TIME_LIMIT_SECONDS` limit (default 600).
 - Neither rule currently has a background scheduler; checks happen while
   handling connections/messages.
+
+## Configuration
+
+`server/config.py` resolves a frozen `Settings` object from environment
+variables with development defaults. `GameManager` accepts an optional
+`Settings` for tests and otherwise loads from the environment. Service URLs,
+the HTTP timeout, room expiry, and the game time limit are all configurable,
+and Compose supplies them through `${VARIABLE:-default}` expressions and an
+optional `.env`.
 
 ## State and concurrency
 
 FastAPI endpoints are asynchronous, but `requests.post` is synchronous. Calls
 to the ML and hash-chain services therefore block the event-loop thread during
-room creation and move verification.
+room creation and move verification. Each call uses `SERVICE_HTTP_TIMEOUT` so a
+stalled dependency cannot block the loop indefinitely.
 
 The mutable room dictionary also has no locking or transactional boundary.
 This is acceptable for understanding the prototype, but concurrent moves to
@@ -133,9 +145,9 @@ here; keep this file focused on how the system works today.
 Summary of the active order:
 
 1. Request validation + WebSocket integration tests (**done**)
-2. Unify ML training/serving feature pipeline (**next**)
-3. Env-based service URLs / credentials
-4. Async HTTP client with timeouts
+2. Unify ML training/serving feature pipeline (**done**)
+3. Env-based service URLs / credentials (**done**)
+4. Async HTTP client with timeouts (**next**)
 5. Typed room state models
 6. Redis rooms + pub/sub
 7. Background timeout tasks

@@ -12,7 +12,9 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Hash-chain integrity on moves | Fixed |
 | Docs / Makefile / run script | In place |
 | WebSocket input validation | Complete (Step 1) |
-| ML train/serve feature parity | Next (Step 2) |
+| ML train/serve feature parity | Complete (Step 2) |
+| Environment-based configuration | Complete (Step 3) |
+| Async service HTTP calls | Next (Step 4) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -56,6 +58,30 @@ System design: [`docs/architecture.md`](docs/architecture.md).
   killing the WebSocket handler; client shows move feedback text for correct /
   incorrect / error results.
 
+### Step 2 — ML training-serving feature parity
+
+- Added one ordered, versioned feature contract in `ml/feature_contract.py`.
+- Reused named DataFrames in dataset generation, training, local prediction,
+  and the HTTP service.
+- Added versioned model bundles with feature-name and contract validation.
+- Removed the duplicate `ml_service/features.py`.
+- Changed the ML-service build context so its image copies the shared `ml`
+  package.
+- Added deterministic dataset/training settings and ML contract tests.
+- Retrained the model: 95% held-out accuracy on 600 test samples.
+- Verified `/predict` returns HTTP 200 without the feature-name warning.
+
+### Step 3 — Environment-based configuration
+
+- Added `server/config.py` with a typed, frozen `Settings` and env parsing.
+- `GameManager` now reads service URLs, HTTP timeout, room expiry, and game
+  time limit from settings and accepts an injected `Settings` for tests.
+- Added explicit `timeout=` to every ML and hash-chain request.
+- Parameterized `docker-compose.yaml` with `${VARIABLE:-default}` and added
+  [`.env.example`](.env.example) plus a `.gitignore` exception for it.
+- Added [`tests/test_config.py`](tests/test_config.py) covering defaults,
+  overrides, invalid values, and settings injection.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
@@ -67,26 +93,24 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 2._
+_Nothing actively in progress. Next work is Step 4._
 
 ## Next
 
-**Step 2 — Unify the ML training and serving feature pipeline**
+**Step 4 — Async HTTP client with explicit connect/read timeouts**
 
 See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
 
 Short checklist:
 
-- [ ] Inventory training, local inference, and service features
-- [ ] Create one named, ordered feature contract
-- [ ] Reuse it in dataset generation, training, and serving
-- [ ] Add parity and prediction tests
-- [ ] Retrain and place the model artifact
-- [ ] Verify `make train`, `make test`, and `/predict`
+- [ ] Replace synchronous `requests.post` with an async client
+- [ ] Source explicit connect/read timeouts from settings
+- [ ] Keep failures mapped to the WebSocket `error` behavior
+- [ ] Stub the async client so tests stay offline
 
 ## Deferred
 
-After Steps 1–2:
+After the current correctness roadmap:
 
 - Stop browser timer on match end
 - Completed-match UI (winner/draw, locked board)

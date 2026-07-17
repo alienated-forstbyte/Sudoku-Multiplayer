@@ -4,6 +4,7 @@ import random
 import json
 import requests
 from engine.generator import generate_full_board, remove_numbers
+from server.config import Settings, load_settings
 
 
 class GameManager:
@@ -13,7 +14,8 @@ class GameManager:
     lost on restart and cannot be shared by multiple server workers.
     """
 
-    def __init__(self):
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or load_settings()
         self.games = {}  # game_id -> game data
 
     def is_expired(self, game_id):
@@ -40,16 +42,18 @@ class GameManager:
         # The generated label chooses clue count; the model supplies the label
         # shown to players.
         response = requests.post(
-            "http://ml_service:8001/predict",
-            json={"board": puzzle}
+            self.settings.predict_url,
+            json={"board": puzzle},
+            timeout=self.settings.service_http_timeout,
         )
         predicted_difficulty = response.json()["difficulty"]
 
         # Hash the immutable original puzzle; live ``board`` may change later.
         original_board = [row[:] for row in puzzle]
         response = requests.post(
-            "http://blockchain:8002/add",
-            json={"data": json.dumps(original_board)}
+            self.settings.blockchain_add_url,
+            json={"data": json.dumps(original_board)},
+            timeout=self.settings.service_http_timeout,
         )
 
         puzzle_hash = response.json()["hash"]
@@ -58,7 +62,7 @@ class GameManager:
 
         self.games[game_id] = {
             "created_at": time.time(),
-            "expiry": 25,
+            "expiry": self.settings.room_expiry_seconds,
 
             "players": [],
 
@@ -71,7 +75,7 @@ class GameManager:
             "scores": {0: 0, 1: 0},
 
             "start_time": None,
-            "time_limit": 600,
+            "time_limit": self.settings.game_time_limit_seconds,
             "started": False,
             "winner": None
         }
@@ -120,11 +124,12 @@ class GameManager:
         game = self.games[game_id]
 
         response = requests.post(
-            "http://blockchain:8002/verify",
+            self.settings.blockchain_verify_url,
             json={
                 "data": json.dumps(game["original_board"]),
                 "hash": game["hash"]
-            }
+            },
+            timeout=self.settings.service_http_timeout,
         )
 
         return response.json()["valid"]

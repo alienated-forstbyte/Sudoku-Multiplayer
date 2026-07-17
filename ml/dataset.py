@@ -1,16 +1,21 @@
 import csv
-from ml.features import *
+import random
+
 from engine.generator import generate_full_board, remove_numbers
-from ml.features import (
-    count_empty,
-    row_density,
-    col_density,
-    box_density,
-    avg_candidates
+from ml.feature_contract import FEATURE_NAMES, extract_feature_record
+from ml.features import count_empty
+
+
+DATASET_COLUMNS = (
+    "empty_cells",
+    *FEATURE_NAMES,
+    "difficulty",
 )
 
 
-def generate_dataset(n=1000, output="sudoku_dataset.csv"):
+def generate_dataset(n=1000, output="sudoku_dataset.csv", random_seed=42):
+    """Generate deterministic synthetic puzzles using the shared contract."""
+    random.seed(random_seed)
     data = []
 
     for _ in range(n):
@@ -19,31 +24,15 @@ def generate_dataset(n=1000, output="sudoku_dataset.csv"):
         for difficulty in ["easy", "medium", "hard"]:
             puzzle = remove_numbers(full, difficulty)
 
-            data.append({
+            record = {
                 "empty_cells": count_empty(puzzle),
-                "row_variance": row_variance(puzzle),
-                "col_variance": col_variance(puzzle),
-                "row_density": row_density(puzzle),
-                "col_density": col_density(puzzle),
-                "box_density": box_density(puzzle),
-                "avg_candidates": avg_candidates(puzzle),
-                "max_candidates": max_candidates(puzzle),
-                "low_candidate_cells": low_candidate_cells(puzzle),
-                "difficulty": difficulty
-            })
+                **extract_feature_record(puzzle),
+                "difficulty": difficulty,
+            }
+            data.append(record)
+
     with open(output, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "empty_cells",
-            "row_variance",
-            "col_variance",
-            "row_density",
-            "col_density",
-            "box_density",
-            "avg_candidates",
-            "max_candidates",
-            "low_candidate_cells",
-            "difficulty"
-        ])
+        writer = csv.DictWriter(f, fieldnames=DATASET_COLUMNS)
         writer.writeheader()
         writer.writerows(data)
 

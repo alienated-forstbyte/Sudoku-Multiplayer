@@ -2,32 +2,51 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report
-import joblib
+
+from ml.feature_contract import FEATURE_NAMES
+from ml.model_bundle import save_model_bundle
 
 
-# Load dataset
-df = pd.read_csv("sudoku_dataset.csv")
+def train_model(
+    dataset_path="sudoku_dataset.csv",
+    model_path="sudoku_model.pkl",
+):
+    """Train deterministically and save a versioned model bundle."""
+    df = pd.read_csv(dataset_path)
 
-# Features + label
-X = df.drop(["difficulty", "empty_cells"], axis=1)
-y = df["difficulty"]
+    missing = set(FEATURE_NAMES) - set(df.columns)
+    if missing:
+        raise ValueError(f"Dataset is missing model features: {sorted(missing)}")
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+    # Selecting by FEATURE_NAMES makes order explicit and excludes
+    # empty_cells, which is retained in the CSV only for dataset inspection.
+    X = df.loc[:, list(FEATURE_NAMES)]
+    y = df["difficulty"]
 
-# Model
-model = RandomForestClassifier(n_estimators=100)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y,
+    )
 
-model.fit(X_train, y_train)
+    model = RandomForestClassifier(
+        n_estimators=100,
+        random_state=42,
+        n_jobs=-1,
+    )
+    model.fit(X_train, y_train)
 
-# Evaluate
-y_pred = model.predict(X_test)
+    y_pred = model.predict(X_test)
+    report = classification_report(y_test, y_pred)
+    print(report)
 
-print(classification_report(y_test, y_pred))
+    save_model_bundle(model, model_path)
+    print(f"Model bundle saved as {model_path}")
 
-# Save model
-joblib.dump(model, "sudoku_model.pkl")
+    return model, report
 
-print("Model saved as sudoku_model.pkl")
+
+if __name__ == "__main__":
+    train_model()

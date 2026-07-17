@@ -1,50 +1,39 @@
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from pydantic import BaseModel
-import joblib
-import json
 
-from features import (
-    row_density, col_density, box_density,
-    avg_candidates,
-    count_empty,
-    max_candidates,
-    low_candidate_cells,
-    row_variance
-)
+from ml.feature_contract import extract_feature_frame
+from ml.model_bundle import load_model_bundle
 
-app = FastAPI()
 
-model = joblib.load("sudoku_model.pkl")
+MODEL_PATH = Path(__file__).with_name("sudoku_model.pkl")
+model = None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Fail at service startup if the model bundle and code are incompatible."""
+    global model
+    model = load_model_bundle(MODEL_PATH)
+    yield
+    model = None
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class BoardInput(BaseModel):
-    board: list
-
-
-def extract_features(board):
-    """Build the ordered numeric vector consumed by the serialized model.
-
-    A model does not match features by function name: positions must be
-    identical to the columns used during training. Keep this contract in sync
-    with ``ml/dataset.py`` and ``ml/train.py`` when changing features.
-    """
-    return [[
-        row_density(board),
-        col_density(board),
-        box_density(board),
-        avg_candidates(board),
-        count_empty(board),
-        max_candidates(board),
-        low_candidate_cells(board),
-        row_variance(board)
-    ]]
+    board: list[list[int]]
 
 
 @app.post("/predict")
 def predict(data: BoardInput):
-    board = data.board
-    features = extract_features(board)
+    if model is None:
+        raise RuntimeError("Model is not loaded")
 
+    features = extract_feature_frame(data.board)
     prediction = model.predict(features)[0]
 
     return {"difficulty": prediction}
