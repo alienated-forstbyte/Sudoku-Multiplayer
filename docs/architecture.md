@@ -121,16 +121,16 @@ Room expiration and game timeout differ:
 `server/config.py` resolves a frozen `Settings` object from environment
 variables with development defaults. `GameManager` accepts an optional
 `Settings` for tests and otherwise loads from the environment. Service URLs,
-the HTTP timeout, room expiry, and the game time limit are all configurable,
+connect/read timeouts, room expiry, and the game time limit are configurable,
 and Compose supplies them through `${VARIABLE:-default}` expressions and an
 optional `.env`.
 
 ## State and concurrency
 
-FastAPI endpoints are asynchronous, but `requests.post` is synchronous. Calls
-to the ML and hash-chain services therefore block the event-loop thread during
-room creation and move verification. Each call uses `SERVICE_HTTP_TIMEOUT` so a
-stalled dependency cannot block the loop indefinitely.
+FastAPI owns one pooled `httpx.AsyncClient` through its application lifespan.
+Room creation and move verification await that client, so slow dependencies do
+not block unrelated WebSocket work. `SERVICE_CONNECT_TIMEOUT` and
+`SERVICE_READ_TIMEOUT` bound connection establishment and response waiting.
 
 The mutable room dictionary also has no locking or transactional boundary.
 This is acceptable for understanding the prototype, but concurrent moves to
@@ -147,8 +147,8 @@ Summary of the active order:
 1. Request validation + WebSocket integration tests (**done**)
 2. Unify ML training/serving feature pipeline (**done**)
 3. Env-based service URLs / credentials (**done**)
-4. Async HTTP client with timeouts (**next**)
-5. Typed room state models
+4. Async HTTP client with timeouts (**done**)
+5. Typed room state models (**next**)
 6. Redis rooms + pub/sub
 7. Background timeout tasks
 8. Health checks, logs, metrics, degradation

@@ -40,7 +40,8 @@ class Settings:
 
     ml_service_url: str = "http://ml_service:8001"
     blockchain_service_url: str = "http://blockchain:8002"
-    service_http_timeout: float = 5.0
+    service_connect_timeout: float = 2.0
+    service_read_timeout: float = 5.0
     room_expiry_seconds: int = 25
     game_time_limit_seconds: int = 600
 
@@ -64,8 +65,11 @@ def load_settings() -> Settings:
         blockchain_service_url=_get_str(
             "BLOCKCHAIN_SERVICE_URL", Settings.blockchain_service_url
         ),
-        service_http_timeout=_get_float(
-            "SERVICE_HTTP_TIMEOUT", Settings.service_http_timeout
+        service_connect_timeout=_get_float(
+            "SERVICE_CONNECT_TIMEOUT", Settings.service_connect_timeout
+        ),
+        service_read_timeout=_get_float(
+            "SERVICE_READ_TIMEOUT", Settings.service_read_timeout
         ),
         room_expiry_seconds=_get_int(
             "ROOM_EXPIRY_SECONDS", Settings.room_expiry_seconds

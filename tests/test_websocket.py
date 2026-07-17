@@ -34,8 +34,11 @@ def seed_game():
 
 @pytest.fixture(autouse=True)
 def isolated_manager(monkeypatch):
+    async def verify_puzzle(_game_id):
+        return True
+
     manager.games.clear()
-    monkeypatch.setattr(manager, "verify_puzzle", lambda game_id: True)
+    monkeypatch.setattr(manager, "verify_puzzle", verify_puzzle)
     yield
     manager.games.clear()
 
@@ -60,7 +63,7 @@ def test_first_player_receives_init_and_waiting():
 def test_move_is_rejected_before_second_player_joins(monkeypatch):
     seed_game()
 
-    def verification_must_not_run(game_id):
+    async def verification_must_not_run(_game_id):
         raise AssertionError("integrity check ran before start validation")
 
     monkeypatch.setattr(manager, "verify_puzzle", verification_must_not_run)
@@ -157,3 +160,34 @@ def test_started_room_handles_protocol_errors_and_broadcasts_moves():
                 assert correct_0["board"][0][0] == 1
                 assert correct_0["game_over"] is True
                 assert correct_0["winner"] == 0
+
+
+def test_integrity_service_failure_returns_error(monkeypatch):
+    seed_game()
+
+    async def unavailable(_game_id):
+        raise RuntimeError("service unavailable")
+
+    monkeypatch.setattr(manager, "verify_puzzle", unavailable)
+
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/ws/{GAME_ID}") as player_0:
+            player_0.receive_json()  # init
+            player_0.receive_json()  # waiting
+
+            with client.websocket_connect(f"/ws/{GAME_ID}") as player_1:
+                player_1.receive_json()  # init
+                player_0.receive_json()  # start
+                player_1.receive_json()  # start
+
+                player_0.send_json({
+                    "type": "move",
+                    "row": 0,
+                    "col": 0,
+                    "value": 1,
+                })
+
+                assert player_0.receive_json() == {
+                    "type": "error",
+                    "message": "Puzzle integrity service unavailable",
+                }

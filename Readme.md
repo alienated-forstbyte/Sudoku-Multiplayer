@@ -141,7 +141,8 @@ cp .env.example .env
 | --- | --- | --- |
 | `ML_SERVICE_URL` | `http://ml_service:8001` | Difficulty service base URL |
 | `BLOCKCHAIN_SERVICE_URL` | `http://blockchain:8002` | Hash-chain service base URL |
-| `SERVICE_HTTP_TIMEOUT` | `5` | Seconds to wait for those HTTP calls |
+| `SERVICE_CONNECT_TIMEOUT` | `2` | Seconds allowed to establish a connection |
+| `SERVICE_READ_TIMEOUT` | `5` | Seconds allowed to wait for a response |
 | `ROOM_EXPIRY_SECONDS` | `25` | Waiting-room lifetime before a second player |
 | `GAME_TIME_LIMIT_SECONDS` | `600` | Match duration before timeout scoring |
 | `MATOMO_DB_ROOT_PASSWORD` | `rootpassword` | MariaDB root password |

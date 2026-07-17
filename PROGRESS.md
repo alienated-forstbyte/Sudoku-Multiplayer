@@ -14,7 +14,8 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | WebSocket input validation | Complete (Step 1) |
 | ML train/serve feature parity | Complete (Step 2) |
 | Environment-based configuration | Complete (Step 3) |
-| Async service HTTP calls | Next (Step 4) |
+| Async service HTTP calls | Complete (Step 4) |
+| Typed room state | Next (Step 5) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -74,13 +75,22 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 ### Step 3 — Environment-based configuration
 
 - Added `server/config.py` with a typed, frozen `Settings` and env parsing.
-- `GameManager` now reads service URLs, HTTP timeout, room expiry, and game
-  time limit from settings and accepts an injected `Settings` for tests.
-- Added explicit `timeout=` to every ML and hash-chain request.
+- `GameManager` reads service URLs, timeouts, room expiry, and game time limit
+  from settings and accepts an injected `Settings` for tests.
 - Parameterized `docker-compose.yaml` with `${VARIABLE:-default}` and added
   [`.env.example`](.env.example) plus a `.gitignore` exception for it.
 - Added [`tests/test_config.py`](tests/test_config.py) covering defaults,
   overrides, invalid values, and settings injection.
+
+### Step 4 — Async service HTTP calls
+
+- Added one pooled `httpx.AsyncClient` owned by the FastAPI lifespan.
+- Converted room creation and integrity verification to awaitable calls.
+- Added separate `SERVICE_CONNECT_TIMEOUT` and `SERVICE_READ_TIMEOUT`; write
+  and pool waits are also explicitly bounded.
+- Removed the synchronous `requests` dependency from the game server.
+- Added mock-transport tests for call flow, timeout construction, endpoint
+  awaiting, non-blocking behavior, and service-failure WebSocket feedback.
 
 ### Playtest notes (not fixed yet)
 
@@ -93,20 +103,20 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 4._
+_Nothing actively in progress. Next work is Step 5._
 
 ## Next
 
-**Step 4 — Async HTTP client with explicit connect/read timeouts**
+**Step 5 — Typed room state models**
 
 See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
 
 Short checklist:
 
-- [ ] Replace synchronous `requests.post` with an async client
-- [ ] Source explicit connect/read timeouts from settings
-- [ ] Keep failures mapped to the WebSocket `error` behavior
-- [ ] Stub the async client so tests stay offline
+- [ ] Add typed room/player state dataclasses
+- [ ] Replace string-key room access in manager and WebSocket code
+- [ ] Encode room invariants and timer helpers on the model
+- [ ] Preserve all HTTP/WebSocket response shapes
 
 ## Deferred
 

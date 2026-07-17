@@ -12,40 +12,39 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 4 — Use an async HTTP client with explicit connect/read timeouts**
+**Step 5 — Replace nested room dictionaries with typed state models**
 
 ### Why this is next
 
-Room creation and move verification call the ML and hash-chain services with
-synchronous `requests.post`, which blocks the event loop under load. An async
-client keeps the WebSocket server responsive and makes timeouts explicit.
+Room state is currently a dictionary of loosely related keys. Typos such as the
+old `boards`/`board` mismatch are discovered only at runtime, and refactoring
+state across WebSocket and manager code is error-prone.
 
 ### Goals
 
-1. Replace synchronous calls with an async client (e.g. `httpx.AsyncClient`).
-2. Set explicit connect and read timeouts sourced from settings.
-3. Keep failures mapped to the existing WebSocket `error` behavior.
-4. Preserve offline testability (no real network in unit tests).
+1. Define typed room/player state with clear defaults and invariants.
+2. Replace string-key indexing in `GameManager` and the WebSocket endpoint.
+3. Preserve the existing protocol and gameplay behavior.
+4. Keep serialization at the protocol boundary explicit.
 
 ### Approach
 
-1. Add an async HTTP dependency and a shared client lifecycle.
-2. Make `create_game`/`verify_puzzle` awaitable or call them off the loop.
-3. Thread settings-based connect/read timeouts through each request.
-4. Update tests to stub the async client; keep integration tests offline.
-5. Confirm a slow dependency no longer blocks other rooms.
+1. Add dataclasses for room state (and player connection if useful).
+2. Type the `games` mapping and move timer/score operations onto the model.
+3. Update manager and endpoint access incrementally.
+4. Add invariant/unit tests, then rerun all WebSocket integration tests.
 
-### Out of scope for Step 4
+### Out of scope for Step 5
 
 - Stopping the client timer / lobby rematch (Deferred)
 - Redis and background timeouts
-- Retry/circuit-breaker policies beyond simple timeouts
+- Persistence or cross-worker serialization
 
 ### Success criteria
 
-- No synchronous service HTTP call remains on the event-loop path.
-- Connect/read timeouts are explicit and configurable.
-- Tests run offline and a stalled dependency does not block other players.
+- Core room state no longer relies on untyped string-key dictionaries.
+- Existing HTTP/WebSocket response shapes are unchanged.
+- All protocol and gameplay tests pass.
 
 ---
 
@@ -57,8 +56,8 @@ client keeps the WebSocket server responsive and makes timeouts explicit.
 | 1 | Request validation + WebSocket integration tests | Done |
 | 2 | Unify ML training/serving feature pipeline | Done |
 | 3 | Move service URLs, timeouts, credentials to env vars | Done |
-| 4 | Async HTTP client with connect/read timeouts | **Next** |
-| 5 | Typed room state models instead of nested dicts | Planned |
+| 4 | Async HTTP client with connect/read timeouts | Done |
+| 5 | Typed room state models instead of nested dicts | **Next** |
 | 6 | Redis-backed rooms + pub/sub for multi-worker | Planned |
 | 7 | Background timeout tasks (not message-driven only) | Planned |
 | 8 | Health checks, structured logs, metrics, degradation | Planned |
@@ -110,3 +109,12 @@ Details also live under **Deferred gameplay feedback** in
 - Parameterized Compose with `${VARIABLE:-default}` and added `.env.example`
   (kept out of ignore rules).
 - Added default/override/validation/injection tests.
+
+## Completed Step 4 summary
+
+- Added one lifespan-managed, pooled `httpx.AsyncClient`.
+- Converted room creation and puzzle verification to async service calls.
+- Added configurable, explicit connect/read/write/pool timeout values.
+- Added offline mock-transport tests, including proof that a slow service call
+  yields to unrelated coroutine work.
+- Preserved WebSocket error feedback for unavailable integrity service.

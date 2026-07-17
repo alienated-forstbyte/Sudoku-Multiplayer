@@ -8,7 +8,8 @@ def test_defaults_match_compose_service_names(monkeypatch):
     for name in (
         "ML_SERVICE_URL",
         "BLOCKCHAIN_SERVICE_URL",
-        "SERVICE_HTTP_TIMEOUT",
+        "SERVICE_CONNECT_TIMEOUT",
+        "SERVICE_READ_TIMEOUT",
         "ROOM_EXPIRY_SECONDS",
         "GAME_TIME_LIMIT_SECONDS",
     ):
@@ -18,7 +19,8 @@ def test_defaults_match_compose_service_names(monkeypatch):
 
     assert settings.ml_service_url == "http://ml_service:8001"
     assert settings.blockchain_service_url == "http://blockchain:8002"
-    assert settings.service_http_timeout == 5.0
+    assert settings.service_connect_timeout == 2.0
+    assert settings.service_read_timeout == 5.0
     assert settings.room_expiry_seconds == 25
     assert settings.game_time_limit_seconds == 600
 
@@ -26,13 +28,15 @@ def test_defaults_match_compose_service_names(monkeypatch):
 def test_environment_overrides_are_applied(monkeypatch):
     monkeypatch.setenv("ML_SERVICE_URL", "http://ml.internal:9101/")
     monkeypatch.setenv("BLOCKCHAIN_SERVICE_URL", "http://chain.internal:9102")
-    monkeypatch.setenv("SERVICE_HTTP_TIMEOUT", "2.5")
+    monkeypatch.setenv("SERVICE_CONNECT_TIMEOUT", "1.5")
+    monkeypatch.setenv("SERVICE_READ_TIMEOUT", "2.5")
     monkeypatch.setenv("ROOM_EXPIRY_SECONDS", "40")
     monkeypatch.setenv("GAME_TIME_LIMIT_SECONDS", "120")
 
     settings = load_settings()
 
-    assert settings.service_http_timeout == 2.5
+    assert settings.service_connect_timeout == 1.5
+    assert settings.service_read_timeout == 2.5
     assert settings.room_expiry_seconds == 40
     assert settings.game_time_limit_seconds == 120
     # Derived URLs normalize trailing slashes.

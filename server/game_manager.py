@@ -2,7 +2,7 @@ import uuid
 import time
 import random
 import json
-import requests
+import httpx
 from engine.generator import generate_full_board, remove_numbers
 from server.config import Settings, load_settings
 
@@ -14,8 +14,13 @@ class GameManager:
     lost on restart and cannot be shared by multiple server workers.
     """
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ):
         self.settings = settings or load_settings()
+        self.http_client = http_client
         self.games = {}  # game_id -> game data
 
     def is_expired(self, game_id):
@@ -28,12 +33,17 @@ class GameManager:
 
         return (time.time() - game["created_at"]) > game["expiry"]
 
-    def create_game(self):
+    def _require_http_client(self) -> httpx.AsyncClient:
+        if self.http_client is None:
+            raise RuntimeError("GameManager HTTP client is not initialized")
+        return self.http_client
+
+    async def create_game(self):
         """Generate a puzzle, classify and hash it, then store a new room.
 
-        The two HTTP calls are synchronous and currently required: an
-        unavailable ML or hash-chain service causes room creation to fail.
-        Service names are Docker Compose DNS names.
+        The two required service calls use the process-wide async HTTP client.
+        An unavailable ML or hash-chain service causes room creation to fail
+        within the configured connect/read timeout.
         """
         full = generate_full_board()
         difficulty = random.choice(["easy", "medium", "hard"])
@@ -41,20 +51,20 @@ class GameManager:
 
         # The generated label chooses clue count; the model supplies the label
         # shown to players.
-        response = requests.post(
+        response = await self._require_http_client().post(
             self.settings.predict_url,
             json={"board": puzzle},
-            timeout=self.settings.service_http_timeout,
         )
+        response.raise_for_status()
         predicted_difficulty = response.json()["difficulty"]
 
         # Hash the immutable original puzzle; live ``board`` may change later.
         original_board = [row[:] for row in puzzle]
-        response = requests.post(
+        response = await self._require_http_client().post(
             self.settings.blockchain_add_url,
             json={"data": json.dumps(original_board)},
-            timeout=self.settings.service_http_timeout,
         )
+        response.raise_for_status()
 
         puzzle_hash = response.json()["hash"]
 
@@ -115,7 +125,7 @@ class GameManager:
     def get_game(self, game_id):
         return self.games.get(game_id)
     
-    def verify_puzzle(self, game_id):
+    async def verify_puzzle(self, game_id):
         """Ask the hash-chain service whether the original puzzle is authentic.
 
         Verification always uses ``original_board``, never the live shared
@@ -123,14 +133,14 @@ class GameManager:
         """
         game = self.games[game_id]
 
-        response = requests.post(
+        response = await self._require_http_client().post(
             self.settings.blockchain_verify_url,
             json={
                 "data": json.dumps(game["original_board"]),
                 "hash": game["hash"]
             },
-            timeout=self.settings.service_http_timeout,
         )
+        response.raise_for_status()
 
         return response.json()["valid"]
     

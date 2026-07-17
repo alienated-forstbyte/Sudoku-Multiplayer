@@ -1,13 +1,42 @@
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from server.game_manager import GameManager
-from server.protocol import validate_move
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import json
 
-app = FastAPI()
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+import httpx
+
+from server.game_manager import GameManager
+from server.protocol import validate_move
+
 manager = GameManager()
+
+
+def build_http_timeout(settings) -> httpx.Timeout:
+    """Build explicit connect/read/write/pool timeouts for service calls."""
+    return httpx.Timeout(
+        connect=settings.service_connect_timeout,
+        read=settings.service_read_timeout,
+        write=settings.service_read_timeout,
+        pool=settings.service_connect_timeout,
+    )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Own one pooled async client for the game server process."""
+    async with httpx.AsyncClient(
+        timeout=build_http_timeout(manager.settings)
+    ) as client:
+        manager.http_client = client
+        try:
+            yield
+        finally:
+            manager.http_client = None
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="client"), name="static")
 
@@ -147,7 +176,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
             # Integrity check against the immutable original puzzle hash.
             try:
-                puzzle_valid = manager.verify_puzzle(game_id)
+                puzzle_valid = await manager.verify_puzzle(game_id)
             except Exception:
                 await websocket.send_text(json.dumps({
                     "type": "error",
@@ -205,6 +234,6 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
 
 @app.post("/create")
-def create_game():
-    game_id = manager.create_game()
+async def create_game():
+    game_id = await manager.create_game()
     return {"game_id": game_id}
