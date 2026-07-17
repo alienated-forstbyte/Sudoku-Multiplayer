@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from server.config import Settings
 from server.game_manager import GameManager
 from server.main import app, build_http_timeout, manager as app_manager
+from server.models import RoomState, freeze_board
 
 
 def test_http_timeout_has_explicit_connect_and_read_values():
@@ -70,8 +71,8 @@ def test_game_manager_uses_async_client_for_service_calls(monkeypatch):
         ("POST", "/add"),
         ("POST", "/verify"),
     ]
-    assert game["difficulty"] == "easy"
-    assert game["hash"] == "puzzle-hash"
+    assert game.difficulty == "easy"
+    assert game.puzzle_hash == "puzzle-hash"
 
 
 def test_slow_service_call_yields_to_other_coroutines():
@@ -93,10 +94,17 @@ def test_slow_service_call_yields_to_other_coroutines():
                 ),
                 http_client=client,
             )
-            manager.games["game"] = {
-                "original_board": [[0 for _ in range(9)] for _ in range(9)],
-                "hash": "hash",
-            }
+            board = [[0 for _ in range(9)] for _ in range(9)]
+            manager.games["game"] = RoomState(
+                created_at=0,
+                expiry_seconds=25,
+                board=[row[:] for row in board],
+                original_board=freeze_board(board),
+                solution=[[1 for _ in range(9)] for _ in range(9)],
+                difficulty="easy",
+                puzzle_hash="hash",
+                time_limit_seconds=600,
+            )
 
             async def heartbeat():
                 await asyncio.sleep(0.01)

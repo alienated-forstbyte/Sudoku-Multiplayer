@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.main import app, manager
+from server.models import RoomState, freeze_board
 
 
 GAME_ID = "test-game"
@@ -15,21 +16,16 @@ def seed_game():
     board = [row[:] for row in solution]
     board[0][0] = 0
 
-    manager.games[GAME_ID] = {
-        "created_at": time.time(),
-        "expiry": 25,
-        "players": [],
-        "board": board,
-        "original_board": [row[:] for row in board],
-        "solution": solution,
-        "difficulty": "easy",
-        "hash": "test-hash",
-        "scores": {0: 0, 1: 0},
-        "start_time": None,
-        "time_limit": 600,
-        "started": False,
-        "winner": None,
-    }
+    manager.games[GAME_ID] = RoomState(
+        created_at=time.time(),
+        expiry_seconds=25,
+        board=board,
+        original_board=freeze_board(board),
+        solution=solution,
+        difficulty="easy",
+        puzzle_hash="test-hash",
+        time_limit_seconds=600,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +80,7 @@ def test_move_is_rejected_before_second_player_joins(monkeypatch):
                 "type": "error",
                 "message": "Game has not started",
             }
-            assert manager.games[GAME_ID]["board"][0][0] == 0
+            assert manager.games[GAME_ID].board[0][0] == 0
 
 
 def test_started_room_handles_protocol_errors_and_broadcasts_moves():
@@ -129,7 +125,7 @@ def test_started_room_handles_protocol_errors_and_broadcasts_moves():
                     "type": "error",
                     "message": "row must be between 0 and 8",
                 }
-                assert manager.games[GAME_ID]["board"][0][0] == 0
+                assert manager.games[GAME_ID].board[0][0] == 0
 
                 player_0.send_json({
                     "type": "move",

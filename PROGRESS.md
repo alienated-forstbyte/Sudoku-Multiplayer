@@ -15,7 +15,8 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | ML train/serve feature parity | Complete (Step 2) |
 | Environment-based configuration | Complete (Step 3) |
 | Async service HTTP calls | Complete (Step 4) |
-| Typed room state | Next (Step 5) |
+| Typed room state | Complete (Step 5) |
+| Redis shared room state | Next (Step 6) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -92,6 +93,17 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 - Added mock-transport tests for call flow, timeout construction, endpoint
   awaiting, non-blocking behavior, and service-failure WebSocket feedback.
 
+### Step 5 — Typed room state
+
+- Added `server/models.py` with `RoomState`, board aliases, a connection
+  protocol, and immutable original-board copies.
+- Moved room expiry, player joining/start, time remaining, timeout winner,
+  move scoring, and completion logic onto the model.
+- Replaced all game-server string-key state access with typed attributes.
+- Fixed the obsolete `check_win_player` implementation that referenced a
+  nonexistent `boards` key.
+- Added focused invariant, timer, scoring, winner, and immutability tests.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
@@ -103,20 +115,21 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 5._
+_Nothing actively in progress. Next work is Step 6._
 
 ## Next
 
-**Step 5 — Typed room state models**
+**Step 6 — Redis-backed room state and pub/sub**
 
 See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
 
 Short checklist:
 
-- [ ] Add typed room/player state dataclasses
-- [ ] Replace string-key room access in manager and WebSocket code
-- [ ] Encode room invariants and timer helpers on the model
-- [ ] Preserve all HTTP/WebSocket response shapes
+- [ ] Separate serializable room data from local WebSocket connections
+- [ ] Add Redis repository plus in-memory test implementation
+- [ ] Use TTLs and atomic/optimistic move updates
+- [ ] Publish room events and forward them to local sockets
+- [ ] Add Redis Compose service and restart/multi-worker tests
 
 ## Deferred
 

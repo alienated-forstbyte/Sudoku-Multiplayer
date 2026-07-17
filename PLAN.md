@@ -12,39 +12,41 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 5 — Replace nested room dictionaries with typed state models**
+**Step 6 — Move room state to Redis and broadcasts to pub/sub**
 
 ### Why this is next
 
-Room state is currently a dictionary of loosely related keys. Typos such as the
-old `boards`/`board` mismatch are discovered only at runtime, and refactoring
-state across WebSocket and manager code is error-prone.
+Typed rooms are still process-local, so restarts lose every game and multiple
+workers cannot coordinate players or board updates. Redis can provide shared
+state and a broadcast channel while WebSocket objects remain local to workers.
 
 ### Goals
 
-1. Define typed room/player state with clear defaults and invariants.
-2. Replace string-key indexing in `GameManager` and the WebSocket endpoint.
-3. Preserve the existing protocol and gameplay behavior.
-4. Keep serialization at the protocol boundary explicit.
+1. Persist serializable room state outside the Python process.
+2. Coordinate updates across multiple game-server workers through pub/sub.
+3. Keep live WebSocket connections local and map them to room subscriptions.
+4. Define expiry/cleanup behavior using Redis TTLs.
 
 ### Approach
 
-1. Add dataclasses for room state (and player connection if useful).
-2. Type the `games` mapping and move timer/score operations onto the model.
-3. Update manager and endpoint access incrementally.
-4. Add invariant/unit tests, then rerun all WebSocket integration tests.
+1. Separate serializable game data from process-local player connections.
+2. Add an async Redis repository interface and an in-memory test implementation.
+3. Store room snapshots with TTL and use optimistic/atomic move updates.
+4. Publish protocol events per room; each worker forwards them to local sockets.
+5. Add Redis to Compose and test restart/multi-worker behavior.
 
-### Out of scope for Step 5
+### Out of scope for Step 6
 
 - Stopping the client timer / lobby rematch (Deferred)
-- Redis and background timeouts
-- Persistence or cross-worker serialization
+- Scheduled timeout tasks (Step 7)
+- Long-term match history storage
 
 ### Success criteria
 
-- Core room state no longer relies on untyped string-key dictionaries.
-- Existing HTTP/WebSocket response shapes are unchanged.
-- All protocol and gameplay tests pass.
+- A room survives a game-server restart while Redis remains available.
+- Two workers can serve different players in the same room.
+- Concurrent moves do not overwrite each other.
+- Existing protocol response shapes remain unchanged.
 
 ---
 
@@ -57,8 +59,8 @@ state across WebSocket and manager code is error-prone.
 | 2 | Unify ML training/serving feature pipeline | Done |
 | 3 | Move service URLs, timeouts, credentials to env vars | Done |
 | 4 | Async HTTP client with connect/read timeouts | Done |
-| 5 | Typed room state models instead of nested dicts | **Next** |
-| 6 | Redis-backed rooms + pub/sub for multi-worker | Planned |
+| 5 | Typed room state models instead of nested dicts | Done |
+| 6 | Redis-backed rooms + pub/sub for multi-worker | **Next** |
 | 7 | Background timeout tasks (not message-driven only) | Planned |
 | 8 | Health checks, structured logs, metrics, degradation | Planned |
 | 9 | Puzzle uniqueness check in the generator | Planned |
@@ -118,3 +120,12 @@ Details also live under **Deferred gameplay feedback** in
 - Added offline mock-transport tests, including proof that a slow service call
   yields to unrelated coroutine work.
 - Preserved WebSocket error feedback for unavailable integrity service.
+
+## Completed Step 5 summary
+
+- Added `RoomState` with typed boards, players, scores, timers, and winner.
+- Made the original puzzle an immutable tuple-of-tuples.
+- Moved join/start, expiry, countdown, timeout winner, move scoring, and
+  completion invariants onto the model.
+- Replaced all server-side string-key room access with attributes.
+- Removed the broken shared-board `boards` lookup and added focused model tests.

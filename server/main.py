@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 
 from server.game_manager import GameManager
+from server.models import RoomState
 from server.protocol import validate_move
 
 manager = GameManager()
@@ -41,18 +42,17 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="client"), name="static")
 
 
-async def broadcast(game, payload: dict) -> None:
+async def broadcast(game: RoomState, payload: dict) -> None:
     """Send ``payload`` to every connected player, ignoring dead sockets."""
     stale = []
     message = json.dumps(payload)
-    for player in list(game["players"]):
+    for player in list(game.players):
         try:
             await player.send_text(message)
         except Exception:
             stale.append(player)
     for player in stale:
-        if player in game["players"]:
-            game["players"].remove(player)
+        game.remove_player(player)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -88,14 +88,14 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     await websocket.send_text(json.dumps({
         "type": "init",
         "player_id": player_id,
-        "started": game["started"],
-        "difficulty": game["difficulty"],
-        "hash": game["hash"],
+        "started": game.started,
+        "difficulty": game.difficulty,
+        "hash": game.puzzle_hash,
         "time_left": manager.get_time_left(game_id)
     }))
 
     # WAITING or START
-    if not game["started"]:
+    if not game.started:
         await websocket.send_text(json.dumps({
             "type": "waiting",
             "message": "Waiting for second player..."
@@ -103,8 +103,8 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
     else:
         await broadcast(game, {
             "type": "start",
-            "board": game["board"],
-            "difficulty": game["difficulty"],
+            "board": game.board,
+            "difficulty": game.difficulty,
             "time_left": manager.get_time_left(game_id),
             "message": "Game started!"
         })
@@ -133,7 +133,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 continue
 
             # Stop if game finished
-            if game["winner"] is not None:
+            if game.winner is not None:
                 await websocket.send_text(json.dumps({
                     "type": "error",
                     "message": "Game already finished"
@@ -142,20 +142,13 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
 
             # Timeout check
             if manager.check_timeout(game_id):
-                scores = game["scores"]
-
-                if scores[0] > scores[1]:
-                    game["winner"] = 0
-                elif scores[1] > scores[0]:
-                    game["winner"] = 1
-                else:
-                    game["winner"] = "draw"
+                game.finish_on_timeout()
 
                 await broadcast(game, {
                     "type": "game_over",
                     "reason": "time_up",
-                    "winner": game["winner"],
-                    "scores": game["scores"]
+                    "winner": game.winner,
+                    "scores": game.scores,
                 })
                 continue
 
@@ -167,7 +160,7 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 }))
                 continue
 
-            if not game["started"]:
+            if not game.started:
                 await websocket.send_text(json.dumps({
                     "type": "error",
                     "message": "Game has not started"
@@ -192,45 +185,23 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 continue
 
             row, col, value = move
-            board = game["board"]
-            solution = game["solution"]
-
-            if board[row][col] != 0:
-                success = False
-                msg = "Cell already filled"
-
-            elif solution[row][col] != value:
-                success = False
-                msg = "Incorrect move"
-
-            else:
-                # Both players mutate one server-authoritative board. The
-                # sender earns the point and wins if this is the final cell.
-                board[row][col] = value
-                game["scores"][player_id] += 1
-                success = True
-                msg = "Correct move"
-
-                # Win check
-                if all(0 not in r for r in board):
-                    game["winner"] = player_id
+            success, msg = game.apply_move(player_id, row, col, value)
 
             response = {
                 "type": "update",
                 "success": success,
                 "message": msg,
-                "board": board,
-                "scores": game["scores"],
+                "board": game.board,
+                "scores": game.scores,
                 "time_left": manager.get_time_left(game_id),
-                "game_over": game["winner"] is not None,
-                "winner": game["winner"]
+                "game_over": game.winner is not None,
+                "winner": game.winner,
             }
 
             await broadcast(game, response)
 
     except WebSocketDisconnect:
-        if websocket in game["players"]:
-            game["players"].remove(websocket)
+        game.remove_player(websocket)
 
 
 @app.post("/create")

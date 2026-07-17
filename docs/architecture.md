@@ -24,8 +24,10 @@ authoritative. Each server update can reduce the displayed time.
 ### Game server
 
 `server/main.py` owns the HTTP and WebSocket endpoints.
-`server/game_manager.py` owns the in-memory room dictionary and talks to the ML
-and hash-chain services.
+`server/game_manager.py` owns a typed `dict[str, RoomState]` and talks to the
+ML and hash-chain services. `server/models.py` defines room fields and owns
+player joining, expiry/timer calculations, scoring, completion, and
+timeout-winner invariants.
 
 A room contains:
 
@@ -132,9 +134,10 @@ Room creation and move verification await that client, so slow dependencies do
 not block unrelated WebSocket work. `SERVICE_CONNECT_TIMEOUT` and
 `SERVICE_READ_TIMEOUT` bound connection establishment and response waiting.
 
-The mutable room dictionary also has no locking or transactional boundary.
-This is acceptable for understanding the prototype, but concurrent moves to
-the same cell can race as the architecture evolves.
+`RoomState` removes string-key ambiguity but remains mutable and has no locking
+or transactional boundary. This is acceptable for understanding the
+prototype, but concurrent moves to the same cell can race as the architecture
+evolves.
 
 ## Roadmap pointer
 
@@ -148,8 +151,8 @@ Summary of the active order:
 2. Unify ML training/serving feature pipeline (**done**)
 3. Env-based service URLs / credentials (**done**)
 4. Async HTTP client with timeouts (**done**)
-5. Typed room state models (**next**)
-6. Redis rooms + pub/sub
+5. Typed room state models (**done**)
+6. Redis rooms + pub/sub (**next**)
 7. Background timeout tasks
 8. Health checks, logs, metrics, degradation
 9. Puzzle uniqueness in generation
