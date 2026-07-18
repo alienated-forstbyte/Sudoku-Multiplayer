@@ -169,9 +169,15 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
             if await manager.check_timeout(game_id):
                 game, _winner = await manager.finish_on_timeout(game_id)
 
+                winner_text = (
+                    f"Player {game.winner} wins"
+                    if isinstance(game.winner, int)
+                    else "Draw"
+                )
                 await manager.broadcast(game_id, {
                     "type": "game_over",
                     "reason": "time_up",
+                    "message": f"Time's up! {winner_text}.",
                     "winner": game.winner,
                     "scores": game.scores,
                 })
@@ -228,6 +234,15 @@ async def websocket_endpoint(websocket: WebSocket, game_id: str):
                 "game_over": game.winner is not None,
                 "winner": game.winner,
             }
+
+            if game.winner is not None:
+                winner_text = (
+                    f"Player {game.winner} wins"
+                    if isinstance(game.winner, int)
+                    else "Draw"
+                )
+                response["reason"] = "board_complete"
+                response["message"] = f"{winner_text} — board completed!"
 
             await manager.broadcast(game_id, response)
 

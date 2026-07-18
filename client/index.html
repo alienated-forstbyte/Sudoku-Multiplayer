@@ -24,25 +24,33 @@
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
     })(window, document, "clarity", "script", "w22voaooze");
-</script>
+    </script>
 </head>
 
 <body>
 
 <h2>Sudoku Multiplayer</h2>
 
-<button onclick="startGame()">Create Game</button>
-
-<input id="gameIdInput" placeholder="Enter Game ID">
-<button onclick="joinGame()">Join Game</button>
+<div class="controls">
+    <button onclick="startGame()">Create Game</button>
+    <div class="join-row">
+        <input id="gameIdInput" placeholder="Enter Game ID">
+        <button onclick="joinGame()">Join Game</button>
+    </div>
+</div>
 
 <p id="status">Idle</p>
 <p id="difficulty"></p>
-<p id="timer"></p>
-<p id="scores"></p>
-<p id="moveFeedback"></p>
+<p id="timer" class="timer"></p>
+<p id="scores" class="scores"></p>
+<p id="moveFeedback" class="move-feedback"></p>
 
-<table id="board"></table>
+<div class="board-wrapper">
+    <table id="board"></table>
+    <div id="gameOverlay" class="game-overlay">
+        <div id="overlayMessage" class="overlay-message"></div>
+    </div>
+</div>
 
 <script src="/static/app.js"></script>
 

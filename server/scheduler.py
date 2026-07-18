@@ -213,6 +213,7 @@ class TimeoutScheduler:
         await self._emit(game_id, {
             "type": "game_over",
             "reason": "room_expired",
+            "message": "Room expired — second player did not join in time.",
             "winner": None,
         })
 
@@ -231,9 +232,16 @@ class TimeoutScheduler:
 
         log.info("Match timeout for %s — winner: %s", game_id, room.winner)
 
+        winner_text = (
+            f"Player {room.winner} wins"
+            if isinstance(room.winner, int)
+            else "Draw"
+        )
+
         await self._emit(game_id, {
             "type": "game_over",
             "reason": "time_up",
+            "message": f"Time's up! {winner_text}.",
             "winner": room.winner,
             "scores": room.scores,
         })
