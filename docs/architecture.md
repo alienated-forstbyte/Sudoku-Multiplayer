@@ -118,8 +118,9 @@ Room expiration and game timeout differ:
 
 - An unstarted room expires after `ROOM_EXPIRY_SECONDS` (default 25).
 - A started room has a `GAME_TIME_LIMIT_SECONDS` limit (default 600).
-- Neither rule currently has a background scheduler; checks happen while
-  handling connections/messages.
+- A background scheduler (`server/scheduler.py`) polls for due deadlines and
+  processes them independently of client messages.  Message-driven checks
+  remain as defense-in-depth.
 
 ## Configuration
 
@@ -157,8 +158,8 @@ Summary of the active order:
 4. Async HTTP client with timeouts (**done**)
 5. Typed room state models (**done**)
 6. Redis rooms + pub/sub (**done**)
-7. Background timeout tasks (**next**)
-8. Health checks, logs, metrics, degradation
+7. Background timeout tasks (**done**)
+8. Health checks, logs, metrics, degradation (**next**)
 9. Puzzle uniqueness in generation
 10. Persist the hash chain
 

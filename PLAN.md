@@ -1,8 +1,8 @@
 # Plan
 
 This is the working roadmap for the Multiplayer Sudoku MLOps demo.
-Architecture details live in [`docs/architecture.md`](docs/architecture.md).
-Status and completed work live in [`PROGRESS.md`](PROGRESS.md).
+Architecture details live in `docs/architecture.md`.
+Status and completed work live in `PROGRESS.md`.
 
 Guiding rule for now: follow this plan in order. Usability feedback from solo
 playtesting is recorded under **Deferred**, not inserted ahead of correctness
@@ -12,43 +12,24 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 7 — Run room expiry and match timeouts independently of messages**
+**Step 8 — Health checks, structured logs, metrics, degradation**
 
 ### Why this is next
 
-Timers are still checked only when a player sends a message. An idle expired
-room remains stored, and a finished match does not emit `game_over` until
-someone interacts. Redis now provides the shared coordination needed for an
-independent scheduler.
+The core correctness pipeline (validation, ML parity, config, async HTTP,
+typed state, Redis, scheduler) is complete. The next layer adds operational
+visibility and resilience for production-like deployments.
 
 ### Goals
 
-1. Expire waiting rooms at their deadline without client activity.
-2. Finish matches and publish `game_over` exactly once at the time limit.
-3. Coordinate multiple workers so only one processes each deadline.
-4. Recover pending deadlines after a worker restart.
+1. Add health-check endpoints for each service.
+2. Introduce structured logging with correlation IDs.
+3. Expose basic metrics (move counts, latency, error rates).
+4. Degrade gracefully when optional services (ML, blockchain) are unavailable.
 
 ### Approach
 
-1. Store room deadlines in a Redis sorted set (with an in-memory test queue).
-2. Run a lifespan-managed scheduler that claims due items atomically.
-3. Re-check room state under the repository mutation lock before expiring or
-   finishing it.
-4. Publish one timeout event through the existing room event bus.
-5. Test idle timeout, cancellation/state changes, duplicate workers, and
-   restart recovery.
-
-### Out of scope for Step 7
-
-- Stopping the client timer / lobby rematch (Deferred)
-- Durable match history after cleanup
-- General-purpose background job infrastructure
-
-### Success criteria
-
-- Waiting rooms disappear at their configured expiry without messages.
-- Started games broadcast `game_over` at their deadline while idle.
-- Multiple workers cannot publish duplicate terminal events.
+TBD — to be detailed when Step 8 begins.
 
 ---
 
@@ -63,11 +44,10 @@ independent scheduler.
 | 4 | Async HTTP client with connect/read timeouts | Done |
 | 5 | Typed room state models instead of nested dicts | Done |
 | 6 | Redis-backed rooms + pub/sub for multi-worker | Done |
-| 7 | Background timeout tasks (not message-driven only) | **Next** |
-| 8 | Health checks, structured logs, metrics, degradation | Planned |
+| 7 | Background timeout tasks (not message-driven only) | Done |
+| 8 | Health checks, structured logs, metrics, degradation | **Next** |
 | 9 | Puzzle uniqueness check in the generator | Planned |
 | 10 | Persist the hash chain beyond process memory | Planned |
-
 
 ---
 
@@ -78,12 +58,12 @@ Recorded after a successful local match. Revisit **after Steps 1 and 2**.
 1. Stop the browser countdown when the match ends (`update` with
    `game_over` or `game_over` event).
 2. Show a completed-match UI (winner/draw, board locked).
-3. “Play again” → return to lobby → create or join a new room.
+3. "Play again" → return to lobby → create or join a new room.
 4. Optional later: in-room rematch request/accept between the same two
    players.
 
 Details also live under **Deferred gameplay feedback** in
-[`docs/architecture.md`](docs/architecture.md).
+`docs/architecture.md`.
 
 ---
 
@@ -140,3 +120,19 @@ Details also live under **Deferred gameplay feedback** in
 - Added Redis AOF, room TTL configuration, and graceful slot release.
 - Verified atomic concurrent mutations, two Redis subscribers, restart
   persistence, and two players connected through separate server workers.
+
+## Completed Step 7 summary
+
+- Added `server/scheduler.py` with `TimeoutScheduler` and pluggable
+  `SchedulerBackend` protocol.
+- `InMemorySchedulerBackend` for tests; `RedisSchedulerBackend` (sorted set
+  with atomic claim) for multi-worker production.
+- Background polling at configurable `SCHEDULER_POLL_INTERVAL` with
+  repository-lock re-check before every action.
+- Waiting rooms expire and are deleted without client interaction.
+- Started matches broadcast exactly one `game_over` at the time limit.
+- `GameManager` schedules expiry on creation, switches to match timeout on
+  start, and cancels on board completion.
+- Message-driven checks retained as defense-in-depth.
+- 15 scheduler tests (backend, handlers, cancellation, duplicate workers,
+  background loop, GameManager integration). Full suite: 60/60 pass.

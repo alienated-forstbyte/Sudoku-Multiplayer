@@ -23,17 +23,21 @@ class GameManager:
         http_client: httpx.AsyncClient | None = None,
         repository=None,
         event_bus=None,
+        scheduler=None,
     ):
         self.settings = settings or load_settings()
         self.http_client = http_client
         self.repository = repository or InMemoryRoomRepository()
         self.event_bus = event_bus or InMemoryEventBus()
         self.local_connections: dict[str, dict[int, object]] = {}
+        self.scheduler = scheduler
 
     async def start(self) -> None:
         await self.event_bus.start(self._deliver_local)
 
     async def stop(self) -> None:
+        if self.scheduler is not None:
+            await self.scheduler.stop()
         for game_id, connections in list(self.local_connections.items()):
             player_ids = tuple(connections)
 
@@ -118,6 +122,11 @@ class GameManager:
         )
         await self.repository.create(game_id, room)
 
+        if self.scheduler is not None:
+            await self.scheduler.schedule_expiry(
+                game_id, room.created_at + room.expiry_seconds
+            )
+
         return game_id
 
     async def join_game(self, game_id, websocket):
@@ -148,6 +157,11 @@ class GameManager:
         player_id, started_now = result
         if player_id is None:
             return None, game, False
+
+        if started_now and self.scheduler is not None:
+            await self.scheduler.cancel(game_id)
+            deadline = game.start_time + game.time_limit_seconds
+            await self.scheduler.schedule_match(game_id, deadline)
 
         self.local_connections.setdefault(game_id, {})[player_id] = websocket
         return player_id, game, started_now
@@ -195,6 +209,8 @@ class GameManager:
         if game is None:
             return None, False, "Game not found"
         success, message = result
+        if success and game.winner is not None and self.scheduler is not None:
+            await self.scheduler.cancel(game_id)
         return game, success, message
 
     async def get_time_left(self, game_id):

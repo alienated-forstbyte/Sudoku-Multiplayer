@@ -12,6 +12,7 @@ from server.events import RedisEventBus
 from server.game_manager import GameManager
 from server.protocol import validate_move
 from server.repository import RedisRoomRepository
+from server.scheduler import RedisSchedulerBackend, TimeoutScheduler
 
 manager = GameManager()
 
@@ -28,7 +29,7 @@ def build_http_timeout(settings) -> httpx.Timeout:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Own pooled service/Redis clients and the room event subscription."""
+    """Own pooled service/Redis clients, room event subscription, and scheduler."""
     redis_client = None
     if manager.settings.redis_url:
         redis_client = redis.from_url(
@@ -42,11 +43,20 @@ async def lifespan(_app: FastAPI):
         )
         manager.event_bus = RedisEventBus(redis_client)
 
+    scheduler = TimeoutScheduler(
+        repository=manager.repository,
+        event_bus=manager.event_bus,
+        backend=RedisSchedulerBackend(redis_client) if redis_client else None,
+        poll_interval=manager.settings.scheduler_poll_interval,
+    )
+    manager.scheduler = scheduler
+
     async with httpx.AsyncClient(
         timeout=build_http_timeout(manager.settings)
     ) as client:
         manager.http_client = client
         await manager.start()
+        await scheduler.start()
         try:
             yield
         finally:

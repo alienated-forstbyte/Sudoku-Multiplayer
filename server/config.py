@@ -51,6 +51,7 @@ class Settings:
     game_time_limit_seconds: int = 600
     redis_url: str | None = None
     redis_room_ttl_seconds: int = 3600
+    scheduler_poll_interval: float = 1.0
 
     @property
     def predict_url(self) -> str:
@@ -87,5 +88,8 @@ def load_settings() -> Settings:
         redis_url=_get_optional_str("REDIS_URL"),
         redis_room_ttl_seconds=_get_int(
             "REDIS_ROOM_TTL_SECONDS", Settings.redis_room_ttl_seconds
+        ),
+        scheduler_poll_interval=_get_float(
+            "SCHEDULER_POLL_INTERVAL", Settings.scheduler_poll_interval
         ),
     )

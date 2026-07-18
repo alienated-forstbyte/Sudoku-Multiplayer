@@ -142,6 +142,8 @@ Some errors close the socket; others leave it connected.
 - Only `move` is a defined client message type.
 - The server does not yet return a structured error code.
 - There is no protocol version or reconnect/resume token.
-- Timeout detection depends on incoming messages.
+- Timeout detection now runs independently of incoming messages via a
+  background scheduler; idle rooms expire and finished matches broadcast
+  `game_over` without requiring player interaction.
 - A disconnect removes the WebSocket from the list, so reconnecting can change
   the index-to-player relationship.

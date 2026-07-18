@@ -17,7 +17,7 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Async service HTTP calls | Complete (Step 4) |
 | Typed room state | Complete (Step 5) |
 | Redis shared room state | Complete (Step 6) |
-| Independent timeout scheduler | Next (Step 7) |
+| Independent timeout scheduler | Complete (Step 7) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -118,32 +118,42 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 - Live verification passed for 20 concurrent atomic mutations, two Redis
   subscribers, server restart recovery, and two players on separate workers.
 
+### Step 7 — Independent timeout scheduler
+
+- Added `server/scheduler.py` with `TimeoutScheduler` and a pluggable
+  `SchedulerBackend` protocol.
+- `InMemorySchedulerBackend` (dict-based) for tests; `RedisSchedulerBackend`
+  (sorted set with atomic claim) for production.
+- Scheduler polls at a configurable `SCHEDULER_POLL_INTERVAL` and re-checks
+  room state under the repository mutation lock before acting.
+- Waiting rooms are expired and deleted without client interaction.
+- Started matches broadcast exactly one `game_over` event at the time limit.
+- `GameManager` schedules expiry on room creation, switches to match timeout
+  when the game starts, and cancels on board completion.
+- Message-driven checks remain as defense-in-depth.
+- Added 15 scheduler tests covering backend operations, expiry/timeout
+  handlers, cancellation, duplicate-worker safety, background loop lifecycle,
+  and GameManager integration.
+- Full suite: 60/60 tests pass.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
 - After the match ended, the client timer kept counting.
-- There is no lobby return / “play again” path yet.
+- There is no lobby return / "play again" path yet.
 
 These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 [`docs/architecture.md`](docs/architecture.md).
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 7._
+_Nothing actively in progress. Next work is Step 8._
 
 ## Next
 
-**Step 7 — Independent room expiry and match timeout scheduler**
+**Step 8 — Health checks, structured logs, metrics, degradation**
 
-See the detailed approach in [`PLAN.md`](PLAN.md#current-focus).
-
-Short checklist:
-
-- [ ] Store room deadlines in Redis (and an in-memory test queue)
-- [ ] Add a lifespan-managed scheduler that atomically claims due work
-- [ ] Expire waiting rooms without incoming messages
-- [ ] Broadcast exactly one `game_over` event at match deadline
-- [ ] Test duplicate workers and restart recovery
+See the roadmap in [`PLAN.md`](PLAN.md#full-roadmap-ordered).
 
 ## Deferred
 
@@ -151,7 +161,7 @@ After the current correctness roadmap:
 
 - Stop browser timer on match end
 - Completed-match UI (winner/draw, locked board)
-- “Play again” → lobby → new room
+- "Play again" → lobby → new room
 - Optional later: in-room rematch handshake
 
 ## How to update this file
