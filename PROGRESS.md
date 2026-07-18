@@ -18,6 +18,7 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Typed room state | Complete (Step 5) |
 | Redis shared room state | Complete (Step 6) |
 | Independent timeout scheduler | Complete (Step 7) |
+| Health checks, logs, metrics, degradation | Complete (Step 8) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -136,6 +137,26 @@ System design: [`docs/architecture.md`](docs/architecture.md).
   and GameManager integration.
 - Full suite: 60/60 tests pass.
 
+### Step 8 — Health checks, structured logs, metrics, degradation
+
+- Added `server/logging_config.py` with structlog in console and JSON modes,
+  correlation-ID context var, and stdlib integration.
+- Added `LOG_LEVEL`, `LOG_FORMAT`, `ALLOW_DEGRADED_CREATION` settings to
+  `server/config.py`.
+- Game server exposes `GET /health` (Redis liveness, overall status) and
+  `GET /metrics` (Prometheus counters/histograms).
+- Correlation-ID middleware propagates `x-correlation-id` through HTTP
+  requests and WebSocket connections.
+- ML service and blockchain service expose `/health` and `/metrics` endpoints.
+- All three services log structured events via structlog.
+- `GameManager.create_game()` degrades gracefully when ML or blockchain is
+  unreachable: difficulty falls back to local random, hash becomes empty string.
+- `GameManager` exposes `redis_ping()` for health checks.
+- `Docker Compose` updated with healthchecks for all services and new env vars.
+- Added `tests/test_health.py` (8 tests), `tests/test_degradation.py`
+  (9 tests), `tests/test_logging.py` (6 tests).
+- Full suite: 83/83 tests pass.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
@@ -147,11 +168,11 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 8._
+_Nothing actively in progress. Next work is Step 9._
 
 ## Next
 
-**Step 8 — Health checks, structured logs, metrics, degradation**
+**Step 9 — Puzzle uniqueness in generation**
 
 See the roadmap in [`PLAN.md`](PLAN.md#full-roadmap-ordered).
 

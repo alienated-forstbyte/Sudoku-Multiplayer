@@ -13,11 +13,20 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       REDIS_ROOM_TTL_SECONDS: ${REDIS_ROOM_TTL_SECONDS:-3600}
       SCHEDULER_POLL_INTERVAL: ${SCHEDULER_POLL_INTERVAL:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-console}
+      ALLOW_DEGRADED_CREATION: ${ALLOW_DEGRADED_CREATION:-true}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     depends_on:
       ml_service:
-        condition: service_started
+        condition: service_healthy
       blockchain:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -29,6 +38,12 @@ services:
       dockerfile: ml_service/Dockerfile
     ports:
       - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8001/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - app_network
 
@@ -36,6 +51,12 @@ services:
     build: ./blockchain
     ports:
       - "8002:8002"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8002/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - app_network
 

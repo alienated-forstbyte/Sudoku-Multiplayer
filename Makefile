@@ -46,6 +46,11 @@ $(MODEL): $(TRAINING_SOURCES) ## Train if the model is missing or contract chang
 test: install ## Run the test suite
 	$(PY) -m pytest -q
 
+.PHONY: lint
+lint: install ## Lint and format-check Python sources
+	$(VENV)/bin/ruff check engine server ml ml_service blockchain tests
+	$(VENV)/bin/ruff format --check engine server ml ml_service blockchain tests
+
 .PHONY: check
 check: install ## Byte-compile sources and validate the compose file
 	$(PY) -m compileall -q engine server ml ml_service blockchain

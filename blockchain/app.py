@@ -1,10 +1,27 @@
-from fastapi import FastAPI
+"""Blockchain integrity micro-service with health checks and Prometheus metrics."""
+
 import hashlib
 import time
+
+import structlog
+from fastapi import FastAPI, Response
+from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+
+log = structlog.get_logger(__name__)
 
 app = FastAPI()
 
 chain = []
+
+BLOCK_COUNT = Counter(
+    "blockchain_blocks_total",
+    "Total blocks added to the chain",
+)
+VERIFY_COUNT = Counter(
+    "blockchain_verify_requests_total",
+    "Total verify requests",
+    ["result"],
+)
 
 
 def hash_data(data: str) -> str:
@@ -38,9 +55,26 @@ def create_block(data):
     return block
 
 
+@app.get("/health")
+def health():
+    """Liveness probe — the process is up."""
+    return {"status": "ok", "chain_length": len(chain)}
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus scrape endpoint."""
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
+
+
 @app.post("/add")
 def add_block(payload: dict):
     block = create_block(payload["data"])
+    BLOCK_COUNT.inc()
+    log.info("blockchain.block_added", index=block["index"])
     return {"hash": block["data_hash"]}
 
 
@@ -48,4 +82,7 @@ def add_block(payload: dict):
 def verify_block(payload: dict):
     """Return whether ``payload["hash"]`` matches ``hash_data`` of the data."""
     recalculated = hash_data(payload["data"])
-    return {"valid": recalculated == payload["hash"]}
+    valid = recalculated == payload["hash"]
+    VERIFY_COUNT.labels(result="valid" if valid else "invalid").inc()
+    log.info("blockchain.verify", valid=valid)
+    return {"valid": valid}

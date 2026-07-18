@@ -3,3 +3,5 @@ uvicorn
 scikit-learn
 joblib
 pandas
+structlog
+prometheus-client

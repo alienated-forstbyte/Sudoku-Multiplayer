@@ -6,7 +6,11 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any, Protocol
 
+import structlog
+
 from server.models import RoomState
+
+log = structlog.get_logger(__name__)
 
 
 Mutation = Callable[[RoomState], Any]

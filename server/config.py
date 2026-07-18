@@ -52,6 +52,9 @@ class Settings:
     redis_url: str | None = None
     redis_room_ttl_seconds: int = 3600
     scheduler_poll_interval: float = 1.0
+    log_level: str = "INFO"
+    log_format: str = "console"
+    allow_degraded_creation: bool = True
 
     @property
     def predict_url(self) -> str:
@@ -92,4 +95,11 @@ def load_settings() -> Settings:
         scheduler_poll_interval=_get_float(
             "SCHEDULER_POLL_INTERVAL", Settings.scheduler_poll_interval
         ),
+        log_level=_get_str("LOG_LEVEL", Settings.log_level),
+        log_format=_get_str("LOG_FORMAT", Settings.log_format),
+        allow_degraded_creation=_get_str(
+            "ALLOW_DEGRADED_CREATION",
+            "true" if Settings.allow_degraded_creation else "false",
+        ).lower()
+        in ("true", "1", "yes"),
     )

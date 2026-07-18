@@ -12,24 +12,22 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 8 — Health checks, structured logs, metrics, degradation**
+**Step 9 — Puzzle uniqueness check in the generator**
 
 ### Why this is next
 
-The core correctness pipeline (validation, ML parity, config, async HTTP,
-typed state, Redis, scheduler) is complete. The next layer adds operational
-visibility and resilience for production-like deployments.
+The operational layer is complete. The generator currently produces puzzles that
+are solvable but not guaranteed to have a unique solution. Adding a uniqueness
+check prevents ambiguous boards.
 
 ### Goals
 
-1. Add health-check endpoints for each service.
-2. Introduce structured logging with correlation IDs.
-3. Expose basic metrics (move counts, latency, error rates).
-4. Degrade gracefully when optional services (ML, blockchain) are unavailable.
+1. Validate that each generated puzzle has exactly one solution.
+2. Re-generate if the uniqueness check fails.
 
 ### Approach
 
-TBD — to be detailed when Step 8 begins.
+TBD — to be detailed when Step 9 begins.
 
 ---
 
@@ -45,8 +43,8 @@ TBD — to be detailed when Step 8 begins.
 | 5 | Typed room state models instead of nested dicts | Done |
 | 6 | Redis-backed rooms + pub/sub for multi-worker | Done |
 | 7 | Background timeout tasks (not message-driven only) | Done |
-| 8 | Health checks, structured logs, metrics, degradation | **Next** |
-| 9 | Puzzle uniqueness check in the generator | Planned |
+| 8 | Health checks, structured logs, metrics, degradation | Done |
+| 9 | Puzzle uniqueness check in the generator | **Next** |
 | 10 | Persist the hash chain beyond process memory | Planned |
 
 ---
@@ -136,3 +134,20 @@ Details also live under **Deferred gameplay feedback** in
 - Message-driven checks retained as defense-in-depth.
 - 15 scheduler tests (backend, handlers, cancellation, duplicate workers,
   background loop, GameManager integration). Full suite: 60/60 pass.
+
+## Completed Step 8 summary
+
+- Added `server/logging_config.py` with structlog (console and JSON modes),
+  correlation-ID context var, and stdlib integration.
+- Added `LOG_LEVEL`, `LOG_FORMAT`, `ALLOW_DEGRADED_CREATION` settings.
+- Game server `GET /health` reports Redis liveness and overall status;
+  `GET /metrics` exposes Prometheus counters/histograms.
+- Correlation-ID middleware propagates `x-correlation-id` across HTTP and
+  WebSocket connections.
+- ML service and blockchain service expose `/health` and `/metrics`.
+- `GameManager.create_game()` degrades gracefully when ML or blockchain is
+  unreachable (difficulty falls back to local; hash becomes empty string).
+- `GameManager` exposes `redis_ping()` for health checks.
+- Docker Compose updated with healthchecks for all services.
+- Added `tests/test_health.py` (8), `tests/test_degradation.py` (9),
+  `tests/test_logging.py` (6). Full suite: 83/83 pass.

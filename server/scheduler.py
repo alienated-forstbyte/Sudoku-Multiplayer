@@ -16,12 +16,13 @@ chosen backend.
 
 import asyncio
 import json
-import logging
 import time
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
-log = logging.getLogger(__name__)
+import structlog
+
+log = structlog.get_logger(__name__)
 
 EventHandler = Callable[[str, dict], Awaitable[None]]
 
@@ -159,17 +160,17 @@ class TimeoutScheduler:
     async def schedule_expiry(self, game_id: str, deadline: float) -> None:
         """Register a waiting-room expiry deadline."""
         await self.backend.add(game_id, deadline, "expiry")
-        log.debug("Scheduled expiry for %s at %.1f", game_id, deadline)
+        log.debug("scheduled_expiry", game_id=game_id, deadline=deadline)
 
     async def schedule_match(self, game_id: str, deadline: float) -> None:
         """Register a match-timeout deadline."""
         await self.backend.add(game_id, deadline, "timeout")
-        log.debug("Scheduled match timeout for %s at %.1f", game_id, deadline)
+        log.debug("scheduled_match_timeout", game_id=game_id, deadline=deadline)
 
     async def cancel(self, game_id: str) -> None:
         """Remove all deadlines for *game_id*."""
         await self.backend.remove(game_id)
-        log.debug("Cancelled deadlines for %s", game_id)
+        log.debug("deadlines_cancelled", game_id=game_id)
 
     # ------------------------------------------------------------------
     # Background loop
@@ -183,7 +184,7 @@ class TimeoutScheduler:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                log.exception("scheduler poll error")
+                log.exception("scheduler.poll_error")
             await asyncio.sleep(self.poll_interval)
 
     async def _process_due(self) -> None:
@@ -208,7 +209,7 @@ class TimeoutScheduler:
             return
 
         await self.repository.delete(game_id)
-        log.info("Expired waiting room %s", game_id)
+        log.info("scheduler.room_expired", game_id=game_id)
 
         await self._emit(game_id, {
             "type": "game_over",
@@ -230,7 +231,7 @@ class TimeoutScheduler:
         if room is None:
             return
 
-        log.info("Match timeout for %s — winner: %s", game_id, room.winner)
+        log.info("scheduler.match_timeout", game_id=game_id, winner=room.winner)
 
         winner_text = (
             f"Player {room.winner} wins"

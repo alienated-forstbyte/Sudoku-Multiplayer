@@ -3,3 +3,5 @@ uvicorn
 websockets
 httpx
 redis
+structlog
+prometheus-client

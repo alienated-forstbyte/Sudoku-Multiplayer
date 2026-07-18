@@ -7,3 +7,6 @@ pandas
 pytest
 httpx
 redis
+structlog
+prometheus-client
+ruff

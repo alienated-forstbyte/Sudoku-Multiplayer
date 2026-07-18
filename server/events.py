@@ -5,6 +5,9 @@ import json
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
+import structlog
+
+log = structlog.get_logger(__name__)
 
 EventHandler = Callable[[str, dict], Awaitable[None]]
 
@@ -38,6 +41,7 @@ class RedisEventBus:
         self._pubsub = self.redis.pubsub()
         await self._pubsub.psubscribe(f"{self.channel_prefix}*")
         self._task = asyncio.create_task(self._listen(handler))
+        log.info("event_bus.started", prefix=self.channel_prefix)
 
     async def _listen(self, handler: EventHandler) -> None:
         async for message in self._pubsub.listen():
@@ -50,7 +54,12 @@ class RedisEventBus:
             if isinstance(data, bytes):
                 data = data.decode()
             game_id = channel.removeprefix(self.channel_prefix)
-            await handler(game_id, json.loads(data))
+            try:
+                await handler(game_id, json.loads(data))
+            except Exception:
+                log.exception(
+                    "event_bus.handler_error", game_id=game_id
+                )
 
     async def publish(self, game_id: str, payload: dict) -> None:
         await self.redis.publish(
@@ -67,3 +76,4 @@ class RedisEventBus:
         if self._pubsub:
             await self._pubsub.aclose()
             self._pubsub = None
+        log.info("event_bus.stopped")

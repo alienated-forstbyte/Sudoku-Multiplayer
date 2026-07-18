@@ -131,6 +131,35 @@ connect/read timeouts, room expiry, and the game time limit are configurable,
 and Compose supplies them through `${VARIABLE:-default}` expressions and an
 optional `.env`.
 
+Additional settings added in Step 8:
+
+- `LOG_LEVEL` (default `INFO`) — structlog/stdlib log level.
+- `LOG_FORMAT` (`console` or `json`) — human-readable or machine-readable.
+- `ALLOW_DEGRADED_CREATION` (default `true`) — when true, game creation
+  succeeds even if the ML or blockchain services are unreachable.
+
+## Structured logging and metrics
+
+All three services (game server, ML, blockchain) use `structlog` with
+correlation IDs. The game server middleware reads or generates a
+`x-correlation-id` header on every HTTP request and WebSocket connection, then
+attaches it to all log lines from that handler.
+
+`GET /health` returns liveness status including Redis ping results.
+`GET /metrics` exposes Prometheus counters and histograms. The ML and
+blockchain services expose the same two endpoints on their respective ports.
+
+## Graceful degradation
+
+`GameManager.create_game()` wraps ML and blockchain HTTP calls in try/except.
+When `ALLOW_DEGRADED_CREATION` is true (the default):
+
+- A failed ML call falls back to the locally-chosen difficulty label.
+- A failed blockchain call sets `puzzle_hash` to an empty string.
+
+The game room is still created and playable. The health endpoint reports
+`"status": "degraded"` when Redis is unreachable.
+
 ## State and concurrency
 
 FastAPI owns one pooled `httpx.AsyncClient` through its application lifespan.
@@ -159,8 +188,8 @@ Summary of the active order:
 5. Typed room state models (**done**)
 6. Redis rooms + pub/sub (**done**)
 7. Background timeout tasks (**done**)
-8. Health checks, logs, metrics, degradation (**next**)
-9. Puzzle uniqueness in generation
+8. Health checks, logs, metrics, degradation (**done**)
+9. Puzzle uniqueness in generation (**next**)
 10. Persist the hash chain
 
 ## Deferred gameplay feedback

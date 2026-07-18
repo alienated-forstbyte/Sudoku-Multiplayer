@@ -1,13 +1,26 @@
-import uuid
-import time
-import random
+"""Coordinate shared rooms, local sockets, and supporting services.
+
+Manages the lifecycle of game rooms: creation (with puzzle generation, ML
+classification, and blockchain hashing), player joining, move processing,
+verification, and broadcasting.  Designed for multi-worker deployment with
+a pluggable repository and event bus.
+"""
+
 import json
+import random
+import time
+import uuid
+
 import httpx
+import structlog
+
 from engine.generator import generate_full_board, remove_numbers
 from server.config import Settings, load_settings
 from server.events import InMemoryEventBus
 from server.models import RoomState, freeze_board
 from server.repository import InMemoryRoomRepository
+
+log = structlog.get_logger(__name__)
 
 
 class GameManager:
@@ -31,6 +44,7 @@ class GameManager:
         self.event_bus = event_bus or InMemoryEventBus()
         self.local_connections: dict[str, dict[int, object]] = {}
         self.scheduler = scheduler
+        self._redis_client = None
 
     async def start(self) -> None:
         await self.event_bus.start(self._deliver_local)
@@ -48,6 +62,19 @@ class GameManager:
             await self.repository.mutate(game_id, release_local_players)
         await self.event_bus.stop()
         self.local_connections.clear()
+
+    def set_redis_client(self, redis_client) -> None:
+        """Store the Redis client so the health endpoint can ping it."""
+        self._redis_client = redis_client
+
+    async def redis_ping(self) -> bool:
+        """Return True if the Redis connection is alive."""
+        if self._redis_client is None:
+            return True
+        try:
+            return await self._redis_client.ping()
+        except Exception:
+            return False
 
     async def _deliver_local(self, game_id: str, payload: dict) -> None:
         """Forward one shared event to sockets connected to this worker."""
@@ -81,32 +108,48 @@ class GameManager:
     async def create_game(self):
         """Generate a puzzle, classify and hash it, then store a new room.
 
-        The two required service calls use the process-wide async HTTP client.
-        An unavailable ML or hash-chain service causes room creation to fail
-        within the configured connect/read timeout.
+        Service failures are handled gracefully when
+        ``settings.allow_degraded_creation`` is True: the ML label falls back
+        to the local difficulty, and the blockchain hash becomes an empty
+        string.
         """
         full = generate_full_board()
         difficulty = random.choice(["easy", "medium", "hard"])
         puzzle = remove_numbers(full, difficulty)
 
-        # The generated label chooses clue count; the model supplies the label
-        # shown to players.
-        response = await self._require_http_client().post(
-            self.settings.predict_url,
-            json={"board": puzzle},
-        )
-        response.raise_for_status()
-        predicted_difficulty = response.json()["difficulty"]
+        predicted_difficulty = difficulty
 
-        # Hash the immutable original puzzle; live ``board`` may change later.
+        try:
+            response = await self._require_http_client().post(
+                self.settings.predict_url,
+                json={"board": puzzle},
+            )
+            response.raise_for_status()
+            predicted_difficulty = response.json()["difficulty"]
+        except Exception:
+            if self.settings.allow_degraded_creation:
+                log.warning(
+                    "ml_service.unavailable",
+                    fallback_difficulty=difficulty,
+                )
+            else:
+                raise
+
         original_board = freeze_board(puzzle)
-        response = await self._require_http_client().post(
-            self.settings.blockchain_add_url,
-            json={"data": json.dumps(original_board)},
-        )
-        response.raise_for_status()
+        puzzle_hash = ""
 
-        puzzle_hash = response.json()["hash"]
+        try:
+            response = await self._require_http_client().post(
+                self.settings.blockchain_add_url,
+                json={"data": json.dumps(original_board)},
+            )
+            response.raise_for_status()
+            puzzle_hash = response.json()["hash"]
+        except Exception:
+            if self.settings.allow_degraded_creation:
+                log.warning("blockchain_service.unavailable")
+            else:
+                raise
 
         game_id = str(uuid.uuid4())
 
@@ -127,6 +170,12 @@ class GameManager:
                 game_id, room.created_at + room.expiry_seconds
             )
 
+        log.info(
+            "game.room_created",
+            game_id=game_id,
+            difficulty=predicted_difficulty,
+            degraded=puzzle_hash == "",
+        )
         return game_id
 
     async def join_game(self, game_id, websocket):
@@ -162,6 +211,7 @@ class GameManager:
             await self.scheduler.cancel(game_id)
             deadline = game.start_time + game.time_limit_seconds
             await self.scheduler.schedule_match(game_id, deadline)
+            log.info("game.match_started", game_id=game_id)
 
         self.local_connections.setdefault(game_id, {})[player_id] = websocket
         return player_id, game, started_now
@@ -176,10 +226,11 @@ class GameManager:
             game_id,
             lambda room: room.remove_player(player_id),
         )
+        log.info("player.disconnected", game_id=game_id, player_id=player_id)
 
     async def get_game(self, game_id):
         return await self.repository.get(game_id)
-    
+
     async def verify_puzzle(self, game_id):
         """Ask the hash-chain service whether the original puzzle is authentic.
 
@@ -200,7 +251,7 @@ class GameManager:
         response.raise_for_status()
 
         return response.json()["valid"]
-    
+
     async def apply_move(self, game_id, player_id, row, col, value):
         game, result = await self.repository.mutate(
             game_id,
