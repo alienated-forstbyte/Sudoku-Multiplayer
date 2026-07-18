@@ -15,10 +15,11 @@ and analytics fit together.
 - Gives both players the same shared Sudoku board.
 - Validates moves on the server against the generated solution.
 - Awards one point to the player who fills a cell correctly.
-- Ends when the board is complete or, after a client message triggers the
-  timeout check, when the 10-minute limit has elapsed.
+- Ends when the board is complete or, when a background scheduler fires a
+  timeout deadline, when the 10-minute limit has elapsed.
 - Calls a separate ML API to label each generated puzzle.
 - Records puzzle data in an in-memory hash chain.
+- Each generated puzzle is guaranteed to have exactly one solution.
 
 Because the board is shared, a correct move immediately appears for both
 players. The player who submits the final correct value wins; on timeout, the
@@ -28,14 +29,17 @@ highest score wins.
 
 ```text
 Browser
-  ├── HTTP POST /create ───────────────┐
-  └── WebSocket /ws/{game_id} ─────────┤
-                                       ▼
-                              FastAPI game server
-                                ├── Sudoku engine
-                                ├── in-memory rooms
-                                ├── HTTP ──► ML service
-                                └── HTTP ──► hash-chain service
+  ├── HTTP POST /create ───────────────────┐
+  └── WebSocket /ws/{game_id} ─────────────┤
+                                           ▼
+                               FastAPI game server
+                                 ├── Sudoku engine
+                                 ├── structlog + correlation IDs
+                                 ├── in-memory / Redis rooms
+                                 ├── background timeout scheduler
+                                 ├── HTTP ──► ML service
+                                 ├── HTTP ──► hash-chain service
+                                 └── Redis ──► pub/sub, scheduler, room state
 
 Browser analytics ──► Matomo ──► MariaDB
                   └─► Microsoft Clarity
@@ -52,11 +56,11 @@ message format. Track work in [PLAN.md](PLAN.md) and [PROGRESS.md](PROGRESS.md).
 .
 ├── blockchain/       # In-memory hash-chain FastAPI service
 ├── client/           # HTML, CSS, and browser WebSocket client
-├── engine/           # Sudoku generation, validation, and solving
+├── engine/           # Sudoku generation, validation, solving, uniqueness
 ├── ml/               # Dataset generation, feature code, training, inference
 ├── ml_service/       # Standalone model-serving FastAPI service
-├── server/           # Game API, WebSocket protocol, and room state
-├── tests/            # Sudoku engine tests
+├── server/           # Game API, WebSocket protocol, room state, scheduler
+├── tests/            # Full test suite (engine, server, services, logging)
 ├── Dockerfile        # Game-server image
 └── docker-compose.yaml
 ```
@@ -80,6 +84,7 @@ Other useful targets (`make help` lists them all):
 ```bash
 make train        # (re)train and place the model in both locations
 make test         # run the test suite in a local venv
+make lint         # lint and format-check Python sources with ruff
 make up-detached  # build and start the stack in the background
 make logs         # follow application service logs
 make down         # stop the stack
@@ -148,6 +153,10 @@ cp .env.example .env
 | `GAME_TIME_LIMIT_SECONDS` | `600` | Match duration before timeout scoring |
 | `REDIS_URL` | `redis://redis:6379/0` | Shared room store and event bus |
 | `REDIS_ROOM_TTL_SECONDS` | `3600` | Maximum lifetime of a stored room snapshot |
+| `SCHEDULER_POLL_INTERVAL` | `1` | Seconds between scheduler polls |
+| `LOG_LEVEL` | `INFO` | structlog/stdlib log level |
+| `LOG_FORMAT` | `console` | `console` (human) or `json` (machine) |
+| `ALLOW_DEGRADED_CREATION` | `true` | Succeed if ML/blockchain are unreachable |
 | `MATOMO_DB_ROOT_PASSWORD` | `rootpassword` | MariaDB root password |
 | `MATOMO_DB_NAME` | `matomo` | Matomo database name |
 | `MATOMO_DB_USER` | `matomo` | Matomo database user |
@@ -193,9 +202,11 @@ python -m compileall engine server ml ml_service blockchain
 docker compose config --quiet
 ```
 
-The tests cover board generation/solving, hash verification, WebSocket
-validation and broadcasts, ML training-serving parity, typed room invariants,
-atomic repository mutations, and multi-manager event delivery.
+The tests cover board generation/solving/uniqueness, hash verification,
+WebSocket validation and broadcasts, ML training-serving parity, typed room
+invariants, atomic repository mutations, multi-manager event delivery,
+scheduler operations, health/metrics endpoints, structured logging, and
+graceful degradation when upstream services are unavailable.
 
 ## Important prototype limitations
 
@@ -205,13 +216,9 @@ atomic repository mutations, and multi-manager event delivery.
 - A hard worker crash can leave a player slot reserved until room cleanup;
   reconnect tokens/short reservation leases are not implemented yet.
 - The hash chain itself remains in process memory and resets with its service.
-- Puzzle difficulty starts as a clue-removal range; the generator does not
-  prove that a puzzle has exactly one solution.
-- Timeout handling is message-driven, not scheduled in the background.
 - Service URLs, timeouts, and game timing come from environment variables that
   default to Docker DNS names; running only the game server directly on the
   host still requires setting `ML_SERVICE_URL` and `BLOCKCHAIN_SERVICE_URL`.
-- Network/service errors are not yet handled gracefully by room creation.
 - Analytics scripts send browser usage data; review consent, retention, and
   privacy requirements before deployment.
 

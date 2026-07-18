@@ -19,6 +19,7 @@ System design: [`docs/architecture.md`](docs/architecture.md).
 | Redis shared room state | Complete (Step 6) |
 | Independent timeout scheduler | Complete (Step 7) |
 | Health checks, logs, metrics, degradation | Complete (Step 8) |
+| Puzzle uniqueness in generation | Complete (Step 9) |
 | Post-match timer + rematch UX | Deferred |
 
 ## Completed
@@ -157,6 +158,20 @@ System design: [`docs/architecture.md`](docs/architecture.md).
   (9 tests), `tests/test_logging.py` (6 tests).
 - Full suite: 83/83 tests pass.
 
+### Step 9 — Puzzle uniqueness in generation
+
+- Added `count_solutions(board, limit=2)` to `engine/solver.py` that counts
+  solutions up to a limit, restoring the board afterwards.
+- Rewrote `remove_numbers()` in `engine/generator.py` to test each removal:
+  after removing a clue, `count_solutions` verifies the puzzle still has
+  exactly one solution; if ambiguous, the clue is restored and a different
+  cell is tried.
+- Generated puzzles across all difficulty levels now have a guaranteed unique
+  solution.
+- Added 7 new engine tests: uniqueness for easy/medium/hard, solution count
+  on complete/empty boards, board restoration after counting.
+- Full suite: 90/90 tests pass.
+
 ### Playtest notes (not fixed yet)
 
 - Moves and board sync worked well in a real two-player session.
@@ -168,11 +183,11 @@ These are tracked under **Deferred** in [`PLAN.md`](PLAN.md) and
 
 ## In progress
 
-_Nothing actively in progress. Next work is Step 9._
+_Nothing actively in progress. Next work is Step 10._
 
 ## Next
 
-**Step 9 — Puzzle uniqueness in generation**
+**Step 10 — Persist the hash chain beyond process memory**
 
 See the roadmap in [`PLAN.md`](PLAN.md#full-roadmap-ordered).
 

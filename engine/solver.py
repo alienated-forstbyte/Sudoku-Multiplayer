@@ -36,3 +36,32 @@ def solve(board):
 
                 return False
     return True
+
+
+def count_solutions(board, limit=2):
+    """Count solutions for ``board`` up to *limit*.
+
+    Stops early once *limit* is reached, which is sufficient to determine
+    uniqueness (exactly one solution).  ``board`` is restored to its original
+    state after the call.
+    """
+    count = [0]
+
+    def _solve(b):
+        if count[0] >= limit:
+            return
+        for row in range(9):
+            for col in range(9):
+                if b[row][col] == 0:
+                    for num in range(1, 10):
+                        if is_valid(b, row, col, num):
+                            b[row][col] = num
+                            _solve(b)
+                            b[row][col] = 0
+                            if count[0] >= limit:
+                                return
+                    return
+        count[0] += 1
+
+    _solve(board)
+    return count[0]

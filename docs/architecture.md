@@ -58,8 +58,9 @@ backtracking. It then copies that grid and removes a random number of clues:
 - hard: 45–60 removed cells.
 
 The completed grid is retained as the server's answer key. Removing clues from
-a valid solution guarantees at least one solution, but the current algorithm
-does not check whether that solution is unique.
+a valid solution guarantees at least one solution. Each removal is validated
+with `count_solutions()` to ensure the resulting puzzle has exactly one
+solution — if removing a clue creates ambiguity, the cell is restored.
 
 `engine/solver.py` provides the same backtracking idea in a reusable solver. It
 mutates the board passed to it.
@@ -111,8 +112,9 @@ consent handling where applicable, and non-default credentials.
    with the answer key, updates the shared board and score, then broadcasts an
    `update`.
 9. Filling the final empty cell makes that submitting player the winner.
-10. If a received message observes an elapsed timer, the server chooses the
-    higher score or a draw and broadcasts `game_over`.
+10. If a received message observes an elapsed timer, or the background
+    scheduler fires a deadline, the server chooses the higher score or a draw
+    and broadcasts `game_over` with a descriptive `message`.
 
 Room expiration and game timeout differ:
 
@@ -189,8 +191,8 @@ Summary of the active order:
 6. Redis rooms + pub/sub (**done**)
 7. Background timeout tasks (**done**)
 8. Health checks, logs, metrics, degradation (**done**)
-9. Puzzle uniqueness in generation (**next**)
-10. Persist the hash chain
+9. Puzzle uniqueness in generation (**done**)
+10. Persist the hash chain (**next**)
 
 ## Deferred gameplay feedback
 

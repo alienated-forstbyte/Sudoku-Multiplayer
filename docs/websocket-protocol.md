@@ -105,18 +105,26 @@ move fills the one shared board and increments only its sender's score.
 ### `game_over`
 
 Broadcast when a received message causes the server to notice that time has
-elapsed.
+elapsed, or when a background scheduler fires a room-expiry or match-timeout
+deadline.
 
 ```json
 {
   "type": "game_over",
   "reason": "time_up",
+  "message": "Time's up! Player 0 wins.",
   "winner": 0,
   "scores": {"0": 18, "1": 15}
 }
 ```
 
-`winner` is player ID `0`, player ID `1`, or the string `"draw"`.
+`reason` is one of:
+
+- `"time_up"` — the match time limit elapsed.
+- `"room_expired"` — a second player did not join before `ROOM_EXPIRY_SECONDS`.
+
+`winner` is player ID `0`, player ID `1`, or `null` (for a draw or room
+expiry).  `message` is a human-readable explanation shown by the client.
 
 The current browser checks a `game_over` boolean rather than explicitly
 handling this event type, so timeout UI handling is incomplete.

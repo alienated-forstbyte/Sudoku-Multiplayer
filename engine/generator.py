@@ -1,5 +1,5 @@
 import random
-from engine.solver import is_valid
+from engine.solver import count_solutions, is_valid
 
 
 def generate_full_board():
@@ -33,11 +33,18 @@ def generate_full_board():
     return board
 
 def remove_numbers(board, difficulty="medium"):
-    """Copy a solved board and remove clues according to a difficulty range.
+    """Copy a solved board and remove clues while preserving a unique solution.
 
-    The input board is not changed. Difficulty here controls only the number
-    of empty cells; this function does not prove that the resulting puzzle has
-    a unique solution or measure the techniques needed to solve it.
+    Each candidate removal is tested: the clue is removed, and
+    ``count_solutions`` checks whether the puzzle still has exactly one
+    solution.  If removing the clue creates ambiguity, the cell is restored
+    and a different cell is tried.
+
+    ``difficulty`` controls the target number of empty cells:
+
+    - easy: 25–35
+    - medium: 35–45
+    - hard: 45–60
     """
     difficulty_map = {
         "easy": (25, 35),
@@ -46,16 +53,28 @@ def remove_numbers(board, difficulty="medium"):
     }
 
     remove_range = difficulty_map.get(difficulty, (35, 45))
-    remove_count = random.randint(*remove_range)
+    target = random.randint(*remove_range)
 
     puzzle = [row[:] for row in board]
+    removed = 0
 
-    while remove_count > 0:
-        row = random.randint(0, 8)
-        col = random.randint(0, 8)
+    # Shuffle all cell positions so removal order is random.
+    cells = [(r, c) for r in range(9) for c in range(9)]
+    random.shuffle(cells)
 
-        if puzzle[row][col] != 0:
-            puzzle[row][col] = 0
-            remove_count -= 1
+    for row, col in cells:
+        if removed >= target:
+            break
+        if puzzle[row][col] == 0:
+            continue
+
+        backup = puzzle[row][col]
+        puzzle[row][col] = 0
+
+        if count_solutions(puzzle, limit=2) == 1:
+            removed += 1
+        else:
+            # Ambiguous — restore the clue.
+            puzzle[row][col] = backup
 
     return puzzle

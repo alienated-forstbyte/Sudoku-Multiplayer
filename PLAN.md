@@ -12,22 +12,22 @@ work unless something actually blocks development.
 
 ## Current focus
 
-**Step 9 — Puzzle uniqueness check in the generator**
+**Step 10 — Persist the hash chain beyond process memory**
 
 ### Why this is next
 
-The operational layer is complete. The generator currently produces puzzles that
-are solvable but not guaranteed to have a unique solution. Adding a uniqueness
-check prevents ambiguous boards.
+The blockchain service currently stores blocks in an in-process list. Restarting
+the service loses all puzzle hashes. Persisting the chain to Redis (or disk)
+makes integrity verification survive restarts.
 
 ### Goals
 
-1. Validate that each generated puzzle has exactly one solution.
-2. Re-generate if the uniqueness check fails.
+1. Store hash-chain blocks in Redis so they survive service restarts.
+2. Maintain the same `/add` and `/verify` API surface.
 
 ### Approach
 
-TBD — to be detailed when Step 9 begins.
+TBD — to be detailed when Step 10 begins.
 
 ---
 
@@ -44,8 +44,8 @@ TBD — to be detailed when Step 9 begins.
 | 6 | Redis-backed rooms + pub/sub for multi-worker | Done |
 | 7 | Background timeout tasks (not message-driven only) | Done |
 | 8 | Health checks, structured logs, metrics, degradation | Done |
-| 9 | Puzzle uniqueness check in the generator | **Next** |
-| 10 | Persist the hash chain beyond process memory | Planned |
+| 9 | Puzzle uniqueness check in the generator | Done |
+| 10 | Persist the hash chain beyond process memory | **Next** |
 
 ---
 
@@ -151,3 +151,14 @@ Details also live under **Deferred gameplay feedback** in
 - Docker Compose updated with healthchecks for all services.
 - Added `tests/test_health.py` (8), `tests/test_degradation.py` (9),
   `tests/test_logging.py` (6). Full suite: 83/83 pass.
+
+## Completed Step 9 summary
+
+- Added `count_solutions(board, limit=2)` to `engine/solver.py` — counts
+  solutions up to a limit and restores the board.
+- Rewrote `remove_numbers()` in `engine/generator.py` to enforce unique
+  solutions: each removal is validated, and ambiguous puzzles have the clue
+  restored.
+- Generated puzzles across all difficulty levels now have exactly one solution.
+- 7 new engine tests (uniqueness across difficulties, solution counting on
+  complete/empty boards, board restoration). Full suite: 90/90 pass.
